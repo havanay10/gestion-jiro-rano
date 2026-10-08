@@ -10,9 +10,12 @@
     "preview": "vite preview"
   },
   "dependencies": {
+    "@hookform/resolvers": "^5.9.1",
     "@react-pdf/renderer": "^4.9.0",
     "@supabase/supabase-js": "^2.117.3",
     "decimal.js": "^10.6.0",
+    "jspdf": "^4.2.1",
+    "jspdf-autotable": "^5.0.8",
     "papaparse": "^5.7.0",
     "react": "^19.2.8",
     "react-dom": "^19.2.8",
