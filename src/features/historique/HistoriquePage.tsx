@@ -10,8 +10,8 @@ const moisFrancais = [
 
 function arrondi(n: number): string {
   return new Intl.NumberFormat('fr-FR', {
-    minimumFractionDigits: 3,
-    maximumFractionDigits: 3,
+    minimumFractionDigits: 0,
+    maximumFractionDigits: 6,
   }).format(n)
 }
 

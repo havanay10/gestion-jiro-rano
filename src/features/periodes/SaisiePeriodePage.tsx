@@ -2,7 +2,7 @@ import { useMemo, useState } from 'react'
 import { supabase } from '../../lib/supabase'
 import { useSaisiePeriode } from './useSaisiePeriode'
 import { calculerRepartition } from './calcul'
-import type { LigneSaisie } from './calcul'
+import { TOLERANCE_EQUILIBRE } from '../../lib/constantes';
 
 function arrondi(n: number, maxDec = 6): string {
   return new Intl.NumberFormat('fr-FR', {
@@ -11,12 +11,17 @@ function arrondi(n: number, maxDec = 6): string {
   }).format(n)
 }
 
+const REGEX_DECIMAL = /^\d*\.?\d*$/
+
 export function SaisiePeriodePage() {
   const maintenant = new Date()
   const [annee, setAnnee] = useState(maintenant.getFullYear())
   const [mois, setMois] = useState(maintenant.getMonth() + 1)
-  const [montantJiro, setMontantJiro] = useState<number>(0)
-  const [montantRano, setMontantRano] = useState<number>(0)
+
+  // Les montants sont stockés en string pour préserver la saisie au clavier
+  const [montantJiroStr, setMontantJiroStr] = useState('')
+  const [montantRanoStr, setMontantRanoStr] = useState('')
+
   const [messageSucces, setMessageSucces] = useState('')
   const [messageErreur, setMessageErreur] = useState('')
   const [enregistrementEnCours, setEnregistrementEnCours] = useState(false)
@@ -24,7 +29,10 @@ export function SaisiePeriodePage() {
   const { lignes, periodeExistante, loading, erreur, setLignes, recharger } =
     useSaisiePeriode(annee, mois)
 
-  // Calcul en temps réel
+  // Conversion pour calcul
+  const montantJiroNum = parseFloat(montantJiroStr) || 0
+  const montantRanoNum = parseFloat(montantRanoStr) || 0
+
   const resultat = useMemo(() => {
     if (lignes.length === 0) {
       return {
@@ -39,13 +47,26 @@ export function SaisiePeriodePage() {
         avertissements: [],
       }
     }
-    return calculerRepartition(montantJiro, montantRano, lignes)
-  }, [lignes, montantJiro, montantRano])
+    return calculerRepartition(montantJiroNum, montantRanoNum, lignes)
+  }, [lignes, montantJiroNum, montantRanoNum])
 
-  function modifierLigne(personne_id: string, champ: keyof LigneSaisie, valeur: number) {
+  // Changement d'un index (string)
+  function changerIndex(personne_id: string, valeur: string) {
+    if (!REGEX_DECIMAL.test(valeur)) return
     setLignes(
       lignes.map((l) =>
-        l.personne_id === personne_id ? { ...l, [champ]: valeur } : l
+        l.personne_id === personne_id ? { ...l, nouveau_index: valeur } : l
+      )
+    )
+  }
+
+  // Changement de la quantité Rano (entier)
+  function changerRano(personne_id: string, valeur: string) {
+    if (valeur !== '' && !/^\d+$/.test(valeur)) return
+    const n = valeur === '' ? 0 : parseInt(valeur, 10)
+    setLignes(
+      lignes.map((l) =>
+        l.personne_id === personne_id ? { ...l, quantite_rano: n } : l
       )
     )
   }
@@ -59,27 +80,37 @@ export function SaisiePeriodePage() {
       return
     }
 
+    if (montantJiroNum <= 0 || montantRanoNum <= 0) {
+      setMessageErreur('Les montants Jiro et Rano doivent être strictement positifs.')
+      return
+    }
+
     setEnregistrementEnCours(true)
     try {
-      const payload = lignes.map((l) => ({
-        personne_id: l.personne_id,
-        index_total: l.nouveau_index,
-        quantite_rano: Math.round(l.quantite_rano),
-      }))
+      const payload = lignes.map((l) => {
+        const indexNum = parseFloat(l.nouveau_index)
+        return {
+          personne_id: l.personne_id,
+          index_total: Number.isFinite(indexNum) ? indexNum : 0,
+          quantite_rano: Math.round(l.quantite_rano),
+        }
+      })
 
       const { error } = await supabase.rpc('enregistrer_periode', {
         p_annee: annee,
         p_mois: mois,
-        p_montant_jiro: montantJiro,
-        p_montant_rano: montantRano,
+        p_montant_jiro: montantJiroNum,
+        p_montant_rano: montantRanoNum,
         p_releves: payload,
       })
 
       if (error) throw new Error(error.message)
 
-      setMessageSucces(`Période ${String(mois).padStart(2, '0')}/${annee} enregistrée.`)
-      setMontantJiro(0)
-      setMontantRano(0)
+      setMessageSucces(
+        `Période ${String(mois).padStart(2, '0')}/${annee} enregistrée.`
+      )
+      setMontantJiroStr('')
+      setMontantRanoStr('')
       await recharger()
     } catch (e: unknown) {
       setMessageErreur(e instanceof Error ? e.message : 'Erreur inconnue.')
@@ -88,7 +119,6 @@ export function SaisiePeriodePage() {
     }
   }
 
-  // Verrouille la saisie quand la période est déjà enregistrée
   const bloque = periodeExistante || loading
 
   return (
@@ -96,17 +126,20 @@ export function SaisiePeriodePage() {
       <header>
         <h2 style={{ margin: 0 }}>Saisie &amp; Répartition d’une période</h2>
         <p style={{ color: '#666', marginTop: 4 }}>
-          Sélectionnez un mois, saisissez les montants des factures, puis les index et quantités Rano.
+          Sélectionnez un mois, saisissez les montants, puis les index et quantités Rano.
         </p>
       </header>
 
-      {/* Sélection période */}
+      {/* Période */}
       <section style={{ border: '1px solid #ddd', borderRadius: 8, padding: 16 }}>
         <h3 style={{ marginTop: 0 }}>Période</h3>
         <div style={{ display: 'flex', gap: 16 }}>
           <label>
             Mois
-            <select value={mois} onChange={(e) => setMois(Number(e.target.value))}>
+            <select
+              value={mois}
+              onChange={(e) => setMois(Number(e.target.value))}
+            >
               {Array.from({ length: 12 }, (_, i) => i + 1).map((m) => (
                 <option key={m} value={m}>
                   {String(m).padStart(2, '0')}
@@ -117,29 +150,18 @@ export function SaisiePeriodePage() {
           <label>
             Année
             <input
-                type="number"
-                value={annee}
-                onChange={(e) => setAnnee(Number(e.target.value))}
+              type="number"
+              value={annee}
+              onChange={(e) => setAnnee(Number(e.target.value))}
             />
           </label>
         </div>
 
         {periodeExistante && (
-        <div
-            style={{
-            background: '#fef3c7',
-            border: '1px solid #f59e0b',
-            borderRadius: 6,
-            padding: 12,
-            color: '#92400e',
-            fontSize: 14,
-            }}
-        >
-            <strong>Période déjà enregistrée.</strong> Une période existe déjà pour{' '}
-            {String(mois).padStart(2, '0')}/{annee}. Changez le mois ou l’année ci-dessus
-            pour créer une nouvelle période, ou consultez la page{' '}
-            <a href="/admin/historique">Historique</a> pour la voir en détail.
-        </div>
+          <p style={{ color: 'crimson' }}>
+            Une période existe déjà pour {String(mois).padStart(2, '0')}/{annee}.
+            Choisissez un autre mois ou consultez l’historique.
+          </p>
         )}
       </section>
 
@@ -152,12 +174,12 @@ export function SaisiePeriodePage() {
             <input
               type="text"
               inputMode="decimal"
-              placeholder="1234.567890"
-              value={montantJiro || ''}
+              placeholder="Ex. 1234.567890"
+              value={montantJiroStr}
               onChange={(e) => {
                 const v = e.target.value
-                if (v === '' || /^\d*\.?\d*$/.test(v)) {
-                  setMontantJiro(v === '' ? 0 : Number(v))
+                if (v === '' || REGEX_DECIMAL.test(v)) {
+                  setMontantJiroStr(v)
                 }
               }}
               disabled={bloque}
@@ -166,10 +188,16 @@ export function SaisiePeriodePage() {
           <label>
             Montant facture Rano (Ar) *
             <input
-              type="number"
-              step="0.001"
-              value={montantRano || ''}
-              onChange={(e) => setMontantRano(Number(e.target.value))}
+              type="text"
+              inputMode="decimal"
+              placeholder="Ex. 1234.567890"
+              value={montantRanoStr}
+              onChange={(e) => {
+                const v = e.target.value
+                if (v === '' || REGEX_DECIMAL.test(v)) {
+                  setMontantRanoStr(v)
+                }
+              }}
               disabled={bloque}
             />
           </label>
@@ -178,9 +206,7 @@ export function SaisiePeriodePage() {
 
       {/* Tableau de saisie */}
       <section style={{ border: '1px solid #ddd', borderRadius: 8, padding: 16 }}>
-        <h3 style={{ marginTop: 0 }}>
-          Personnes concernées ({lignes.length})
-        </h3>
+        <h3 style={{ marginTop: 0 }}>Personnes concernées ({lignes.length})</h3>
 
         {loading && <p>Chargement…</p>}
         {erreur && <p style={{ color: 'crimson' }}>Erreur : {erreur}</p>}
@@ -206,7 +232,13 @@ export function SaisiePeriodePage() {
               {lignes.map((l, i) => {
                 const calc = resultat.lignes[i]
                 const conso = calc?.consommation ?? 0
-                const indexInvalide = !l.consoForceeZero && l.nouveau_index < l.index_ref
+
+                const indexNum = parseFloat(l.nouveau_index)
+                const indexInvalide =
+                  !l.consoForceeZero &&
+                  Number.isFinite(indexNum) &&
+                  indexNum < l.index_ref
+
                 return (
                   <tr key={l.personne_id} style={{ borderBottom: '1px solid #f0f0f0' }}>
                     <td style={{ padding: 8 }}>
@@ -221,35 +253,31 @@ export function SaisiePeriodePage() {
                     <td style={{ padding: 8 }}>{arrondi(l.index_ref)}</td>
                     <td style={{ padding: 8 }}>
                       <input
-                        type="number"
-                        step="0.001"
+                        type="text"
+                        inputMode="decimal"
                         value={l.nouveau_index}
-                        onChange={(e) =>
-                          modifierLigne(l.personne_id, 'nouveau_index', Number(e.target.value))
-                        }
+                        onChange={(e) => changerIndex(l.personne_id, e.target.value)}
                         disabled={bloque || l.consoForceeZero}
                         style={{
-                          width: 110,
+                          width: 130,
                           borderColor: indexInvalide ? 'crimson' : undefined,
                         }}
                       />
                     </td>
-                    <td style={{ padding: 8, color: indexInvalide ? 'crimson' : undefined }}>
+                    <td
+                      style={{
+                        padding: 8,
+                        color: indexInvalide ? 'crimson' : undefined,
+                      }}
+                    >
                       {arrondi(conso)}
                     </td>
                     <td style={{ padding: 8 }}>
                       <input
-                        type="number"
-                        step="1"
-                        min="0"
-                        value={l.quantite_rano}
-                        onChange={(e) =>
-                          modifierLigne(
-                            l.personne_id,
-                            'quantite_rano',
-                            Math.max(0, Math.floor(Number(e.target.value)))
-                          )
-                        }
+                        type="text"
+                        inputMode="numeric"
+                        value={l.quantite_rano === 0 ? '' : String(l.quantite_rano)}
+                        onChange={(e) => changerRano(l.personne_id, e.target.value)}
                         disabled={bloque}
                         style={{ width: 80 }}
                       />
@@ -266,9 +294,7 @@ export function SaisiePeriodePage() {
             </tbody>
             <tfoot>
               <tr style={{ borderTop: '2px solid #333', fontWeight: 600 }}>
-                <td style={{ padding: 8 }} colSpan={4}>
-                  Totaux
-                </td>
+                <td style={{ padding: 8 }} colSpan={4}>Totaux</td>
                 <td style={{ padding: 8 }}>{arrondi(resultat.totalConsoJiro)}</td>
                 <td style={{ padding: 8 }}>{resultat.totalRano}</td>
                 <td style={{ padding: 8 }}>{arrondi(resultat.totalPartJiro)}</td>
@@ -292,29 +318,36 @@ export function SaisiePeriodePage() {
             </li>
             <li>
               <strong>Équilibre Jiro :</strong>{' '}
-              {arrondi(resultat.totalPartJiro) === arrondi(montantJiro) ? (
+              {Math.abs(resultat.totalPartJiro - montantJiroNum) < TOLERANCE_EQUILIBRE ? (
                 <span style={{ color: 'green' }}>équilibré</span>
               ) : (
                 <span style={{ color: 'crimson' }}>écart détecté</span>
               )}{' '}
-              (facture : {arrondi(montantJiro)} Ar)
+              (facture : {arrondi(montantJiroNum)} Ar)
             </li>
             <li>
               <strong>Équilibre Rano :</strong>{' '}
-              {arrondi(resultat.totalPartRano) === arrondi(montantRano) ? (
+              {Math.abs(resultat.totalPartRano - montantRanoNum) < TOLERANCE_EQUILIBRE ? (
                 <span style={{ color: 'green' }}>équilibré</span>
               ) : (
                 <span style={{ color: 'crimson' }}>écart détecté</span>
               )}{' '}
-              (facture : {arrondi(montantRano)} Ar)
+              (facture : {arrondi(montantRanoNum)} Ar)
             </li>
           </ul>
         </section>
       )}
 
-      {/* Messages */}
+      {/* Erreurs */}
       {resultat.erreurs.length > 0 && (
-        <section style={{ border: '1px solid crimson', borderRadius: 8, padding: 16, background: '#fff5f5' }}>
+        <section
+          style={{
+            border: '1px solid crimson',
+            borderRadius: 8,
+            padding: 16,
+            background: '#fff5f5',
+          }}
+        >
           <h4 style={{ marginTop: 0, color: 'crimson' }}>Erreurs bloquantes</h4>
           <ul>
             {resultat.erreurs.map((e, i) => (
@@ -324,8 +357,16 @@ export function SaisiePeriodePage() {
         </section>
       )}
 
+      {/* Avertissements */}
       {resultat.avertissements.length > 0 && (
-        <section style={{ border: '1px solid #f59e0b', borderRadius: 8, padding: 16, background: '#fffbeb' }}>
+        <section
+          style={{
+            border: '1px solid #f59e0b',
+            borderRadius: 8,
+            padding: 16,
+            background: '#fffbeb',
+          }}
+        >
           <h4 style={{ marginTop: 0, color: '#92400e' }}>Avertissements</h4>
           <ul>
             {resultat.avertissements.map((a, i) => (
@@ -343,9 +384,18 @@ export function SaisiePeriodePage() {
         <button
           type="button"
           onClick={enregistrer}
-          disabled={bloque || enregistrementEnCours || resultat.erreurs.length > 0 || lignes.length === 0}
+          disabled={
+            bloque ||
+            enregistrementEnCours ||
+            resultat.erreurs.length > 0 ||
+            lignes.length === 0 ||
+            montantJiroNum <= 0 ||
+            montantRanoNum <= 0
+          }
         >
-          {enregistrementEnCours ? 'Enregistrement…' : `Enregistrer la période ${String(mois).padStart(2, '0')}/${annee}`}
+          {enregistrementEnCours
+            ? 'Enregistrement…'
+            : `Enregistrer la période ${String(mois).padStart(2, '0')}/${annee}`}
         </button>
         <button type="button" onClick={recharger} disabled={bloque}>
           Recharger

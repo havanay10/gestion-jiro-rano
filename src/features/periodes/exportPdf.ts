@@ -1,6 +1,7 @@
 import jsPDF from 'jspdf'
 import autoTable from 'jspdf-autotable'
 import type { DetailPeriode } from './useDetailPeriode'
+import { TOLERANCE_EQUILIBRE } from '../../lib/constantes';
 
 const moisFrancais = [
   '', 'Janvier', 'Février', 'Mars', 'Avril', 'Mai', 'Juin',
@@ -102,8 +103,9 @@ export function exporterPeriodePdf(detail: DetailPeriode) {
     14,
     finTableau + 10
   )
-
-  const equilibre = Math.abs(ecartJiro) < 1e-6 && Math.abs(ecartRano) < 1e-6
+  const equilibre =
+    Math.abs(ecartJiro) < TOLERANCE_EQUILIBRE &&
+    Math.abs(ecartRano) < TOLERANCE_EQUILIBRE
   doc.setTextColor(equilibre ? 22 : 200, equilibre ? 130 : 30, equilibre ? 60 : 30)
   doc.text(
     equilibre

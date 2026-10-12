@@ -38,7 +38,7 @@ export function useSaisiePeriode(annee: number, mois: number) {
       return
     }
 
-    // 2. Charger les personnes actives dont la période de départ est atteinte
+    // 2. Personnes actives dont la période de départ est atteinte
     const { data: personnes, error: errP } = await supabase
       .from('personnes')
       .select('id, nom, periode_depart_annee, periode_depart_mois')
@@ -49,7 +49,12 @@ export function useSaisiePeriode(annee: number, mois: number) {
       .order('nom')
 
     if (errP) {
-      setEtat({ lignes: [], periodeExistante: false, loading: false, erreur: errP.message })
+      setEtat({
+        lignes: [],
+        periodeExistante: false,
+        loading: false,
+        erreur: errP.message,
+      })
       return
     }
 
@@ -60,7 +65,7 @@ export function useSaisiePeriode(annee: number, mois: number) {
 
     const ids = personnes.map((p) => p.id)
 
-    // 3. Charger les rattachements en cours pour le logement
+    // 3. Rattachements en cours (logement actif)
     const { data: rattach } = await supabase
       .from('rattachements_personne_logement')
       .select('personne_id, logements(nom_code)')
@@ -72,14 +77,13 @@ export function useSaisiePeriode(annee: number, mois: number) {
       logementMap.set(r.personne_id, r.logements?.nom_code ?? '—')
     })
 
-    // 4. Charger tous les relevés de ces personnes pour trouver l'index de référence
+    // 4. Tous les relevés pour trouver l'index de référence
     const { data: releves } = await supabase
       .from('releves')
       .select('personne_id, index_total, est_initial, created_at, periodes(annee, mois)')
       .in('personne_id', ids)
       .order('created_at', { ascending: false })
 
-    // Pour chaque personne, trouver le relevé le plus récent AVANT la période
     const refMap = new Map<string, number>()
     ;(releves ?? []).forEach((r: any) => {
       if (refMap.has(r.personne_id)) return
@@ -96,16 +100,17 @@ export function useSaisiePeriode(annee: number, mois: number) {
       }
     })
 
-    // 5. Construire les lignes
+    // 5. Construire les lignes (index en string pour permettre la saisie)
     const lignes: LigneSaisie[] = personnes.map((p) => {
       const consoForceeZero =
         p.periode_depart_annee === annee && p.periode_depart_mois === mois
+      const refValue = refMap.get(p.id) ?? 0
       return {
         personne_id: p.id,
         nom: p.nom,
         logement: logementMap.get(p.id) ?? '—',
-        index_ref: refMap.get(p.id) ?? 0,
-        nouveau_index: refMap.get(p.id) ?? 0, // pré-rempli avec la référence
+        index_ref: refValue,
+        nouveau_index: String(refValue),
         quantite_rano: 0,
         consoForceeZero,
       }
@@ -118,5 +123,10 @@ export function useSaisiePeriode(annee: number, mois: number) {
     charger()
   }, [charger])
 
-  return { ...etat, recharger: charger, setLignes: (l: LigneSaisie[]) => setEtat((e) => ({ ...e, lignes: l })) }
+  return {
+    ...etat,
+    recharger: charger,
+    setLignes: (l: LigneSaisie[]) =>
+      setEtat((e) => ({ ...e, lignes: l })),
+  }
 }

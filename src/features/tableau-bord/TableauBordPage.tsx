@@ -6,9 +6,9 @@ const moisFrancais = [
   'Juillet', 'Août', 'Septembre', 'Octobre', 'Novembre', 'Décembre',
 ]
 
-function fmt(n: number, dec = 3): string {
+function fmt(n: number, dec = 6): string {
   return new Intl.NumberFormat('fr-FR', {
-    minimumFractionDigits: dec,
+    minimumFractionDigits: 0,
     maximumFractionDigits: dec,
   }).format(n)
 }

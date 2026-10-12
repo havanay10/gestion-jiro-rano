@@ -1,15 +1,16 @@
 import { Link, useParams } from 'react-router-dom'
 import { useDetailPeriode } from './useDetailPeriode'
 import { exporterPeriodePdf } from './exportPdf'
+import { TOLERANCE_EQUILIBRE } from '../../lib/constantes';
 
 const moisFrancais = [
   '', 'Janvier', 'Février', 'Mars', 'Avril', 'Mai', 'Juin',
   'Juillet', 'Août', 'Septembre', 'Octobre', 'Novembre', 'Décembre',
 ]
 
-function fmt(n: number, dec = 3): string {
+function fmt(n: number, dec = 6): string {
   return new Intl.NumberFormat('fr-FR', {
-    minimumFractionDigits: dec,
+    minimumFractionDigits: 0,
     maximumFractionDigits: dec,
   }).format(n)
 }
@@ -30,7 +31,9 @@ export function DetailPeriodePage() {
   const totalPartRano = detail.lignes.reduce((s, l) => s + l.part_rano, 0)
   const ecartJiro = totalPartJiro - totalJiro
   const ecartRano = totalPartRano - totalRano
-  const equilibre = Math.abs(ecartJiro) < 0.001 && Math.abs(ecartRano) < 0.001
+  const equilibre =
+    Math.abs(ecartJiro) < TOLERANCE_EQUILIBRE &&
+    Math.abs(ecartRano) < TOLERANCE_EQUILIBRE
 
   return (
     <div style={{ display: 'grid', gap: 24 }}>

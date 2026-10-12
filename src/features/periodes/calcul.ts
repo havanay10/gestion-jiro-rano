@@ -5,9 +5,8 @@ export type LigneSaisie = {
   nom: string
   logement: string
   index_ref: number
-  nouveau_index: number
+  nouveau_index: string   // string pour préserver la saisie au clavier
   quantite_rano: number
-  // Si true, la consommation Jiro est forcée à 0 (période de départ)
   consoForceeZero: boolean
 }
 
@@ -29,6 +28,16 @@ export type ResultatCalcul = {
   avertissements: string[]
 }
 
+function parserNombre(str: string): Decimal | null {
+  const t = str.trim()
+  if (t === '' || t === '.') return new Decimal(0)
+  try {
+    return new Decimal(t)
+  } catch {
+    return null
+  }
+}
+
 export function calculerRepartition(
   montantJiro: number,
   montantRano: number,
@@ -41,19 +50,25 @@ export function calculerRepartition(
   if (!(montantRano > 0)) erreurs.push('Le montant Rano doit être strictement positif.')
 
   const lignesDec = lignes.map((l) => {
-    const nouveauIndex = new Decimal(l.nouveau_index)
     const indexRef = new Decimal(l.index_ref)
+    const nouveauIndexDec = parserNombre(l.nouveau_index)
+
+    if (nouveauIndexDec === null) {
+      erreurs.push(`Index invalide pour ${l.nom}.`)
+    }
 
     let conso: Decimal
     if (l.consoForceeZero) {
       conso = new Decimal(0)
+    } else if (nouveauIndexDec !== null) {
+      conso = nouveauIndexDec.minus(indexRef)
     } else {
-      conso = nouveauIndex.minus(indexRef)
+      conso = new Decimal(0)
     }
 
-    if (conso.isNegative()) {
+    if (!l.consoForceeZero && conso.isNegative()) {
       erreurs.push(
-        `Index inférieur au précédent pour ${l.nom} (ref: ${l.index_ref}, saisi: ${l.nouveau_index}).`
+        `Index inférieur au précédent pour ${l.nom} (réf. ${l.index_ref}, saisi ${l.nouveau_index}).`
       )
     }
 
@@ -96,31 +111,36 @@ export function calculerRepartition(
   const cuJiro = montantJiroDec.div(totalConso)
   const cuRano = montantRanoDec.div(totalRano)
 
-  // Parts exactes
   const partsJiroExact = lignesDec.map((x) => cuJiro.times(x.conso))
   const partsRanoExact = lignesDec.map((x) => cuRano.times(x.quantite))
 
-  // Répartition en millièmes
-  const partsJiroMil = repartirAvecPlusGrandReste(
+  const UNITE = new Decimal(1000000) // micro-Ariary
+  const partsJiroUnits = repartirAvecPlusGrandReste(
     partsJiroExact,
     lignesDec.map((x) => x.ligne.personne_id),
-    montantJiroDec.times(1000)
+    montantJiroDec.times(UNITE)
   )
-  const partsRanoMil = repartirAvecPlusGrandReste(
+  const partsRanoUnits = repartirAvecPlusGrandReste(
     partsRanoExact,
     lignesDec.map((x) => x.ligne.personne_id),
-    montantRanoDec.times(1000)
+    montantRanoDec.times(UNITE)
   )
 
   const lignesCalculees: LigneCalculee[] = lignesDec.map((x, i) => ({
     ...x.ligne,
     consommation: x.conso.toNumber(),
-    part_jiro: partsJiroMil[i].div(1000).toNumber(),
-    part_rano: partsRanoMil[i].div(1000).toNumber(),
+    part_jiro: partsJiroUnits[i].div(UNITE).toNumber(),
+    part_rano: partsRanoUnits[i].div(UNITE).toNumber(),
   }))
 
-  const totalPartJiro = partsJiroMil.reduce((s, v) => s.plus(v), new Decimal(0)).div(1000).toNumber()
-  const totalPartRano = partsRanoMil.reduce((s, v) => s.plus(v), new Decimal(0)).div(1000).toNumber()
+  const totalPartJiro = partsJiroUnits
+    .reduce((s, v) => s.plus(v), new Decimal(0))
+    .div(UNITE)
+    .toNumber()
+  const totalPartRano = partsRanoUnits
+    .reduce((s, v) => s.plus(v), new Decimal(0))
+    .div(UNITE)
+    .toNumber()
 
   return {
     lignes: lignesCalculees,
@@ -138,16 +158,16 @@ export function calculerRepartition(
 function repartirAvecPlusGrandReste(
   partsExactes: Decimal[],
   personneIds: string[],
-  totalMilliemes: Decimal
+  totalUnites: Decimal
 ): Decimal[] {
-  const mille = new Decimal(1000)
-  const floors = partsExactes.map((p) => p.times(mille).floor())
+  const UNITE = new Decimal(1000000)
+  const floors = partsExactes.map((p) => p.times(UNITE).floor())
   const sumFloors = floors.reduce((s, v) => s.plus(v), new Decimal(0))
-  const reste = totalMilliemes.minus(sumFloors).toNumber()
+  const reste = totalUnites.minus(sumFloors).toNumber()
 
   const rangs = partsExactes.map((p, i) => ({
     i,
-    frac: p.times(mille).minus(p.times(mille).floor()),
+    frac: p.times(UNITE).minus(p.times(UNITE).floor()),
     id: personneIds[i],
   }))
 

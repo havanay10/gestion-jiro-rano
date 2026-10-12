@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useState } from 'react'
 import { supabase } from '../../lib/supabase'
+import { TOLERANCE_EQUILIBRE } from '../../lib/constantes';
 
 export type PeriodeResume = {
   id: string
@@ -115,7 +116,8 @@ export function useHistorique(filtres: Filtres) {
       const tJiro = sumJiro.get(p.id) ?? 0
       const tRano = sumRano.get(p.id) ?? 0
       const equilibre =
-        Math.abs(tJiro - mJiro) < 0.001 && Math.abs(tRano - mRano) < 0.001
+        Math.abs(tJiro - mJiro) < TOLERANCE_EQUILIBRE &&
+        Math.abs(tRano - mRano) < TOLERANCE_EQUILIBRE
       return {
         id: p.id,
         annee: p.annee,
