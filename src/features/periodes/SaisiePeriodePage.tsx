@@ -4,10 +4,10 @@ import { useSaisiePeriode } from './useSaisiePeriode'
 import { calculerRepartition } from './calcul'
 import type { LigneSaisie } from './calcul'
 
-function arrondi(n: number, dec = 3): string {
+function arrondi(n: number, maxDec = 6): string {
   return new Intl.NumberFormat('fr-FR', {
-    minimumFractionDigits: dec,
-    maximumFractionDigits: dec,
+    maximumFractionDigits: maxDec,
+    minimumFractionDigits: 0,
   }).format(n)
 }
 
@@ -150,10 +150,16 @@ export function SaisiePeriodePage() {
           <label>
             Montant facture Jiro (Ar) *
             <input
-              type="number"
-              step="0.001"
+              type="text"
+              inputMode="decimal"
+              placeholder="1234.567890"
               value={montantJiro || ''}
-              onChange={(e) => setMontantJiro(Number(e.target.value))}
+              onChange={(e) => {
+                const v = e.target.value
+                if (v === '' || /^\d*\.?\d*$/.test(v)) {
+                  setMontantJiro(v === '' ? 0 : Number(v))
+                }
+              }}
               disabled={bloque}
             />
           </label>

@@ -9,14 +9,30 @@ import { supabase } from '../../lib/supabase'
 type LogementOption = { id: string; nom_code: string }
 
 export function PersonnesPage() {
-  const { personnes, loading, erreur, creerPersonne, recharger } = usePersonnes()
+  const {
+    personnes,
+    loading,
+    erreur,
+    erreurEmails,
+    creerPersonne,
+    recharger,
+  } = usePersonnes()
+
   const [logementsDispo, setLogementsDispo] = useState<LogementOption[]>([])
   const [messageSucces, setMessageSucces] = useState('')
   const [messageErreur, setMessageErreur] = useState('')
-  const [compteEnCours, setCompteEnCours] = useState<string | null>(null) // personne_id
+
+  // Création de compte
+  const [compteEnCours, setCompteEnCours] = useState<string | null>(null)
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
   const [messageCompte, setMessageCompte] = useState('')
+
+  // Réactivation
+  const [reactivationEnCours, setReactivationEnCours] = useState<string | null>(null)
+  const [logementReactivation, setLogementReactivation] = useState<string>('')
+  const [messageReactivation, setMessageReactivation] = useState('')
+
   const {
     register,
     handleSubmit,
@@ -35,7 +51,6 @@ export function PersonnesPage() {
 
   // Charge uniquement les logements NON occupés par une personne active
   const chargerLogementsDispo = useCallback(async () => {
-    // 1. Récupérer les personnes actives
     const { data: actifs, error: errA } = await supabase
       .from('personnes')
       .select('id')
@@ -48,7 +63,6 @@ export function PersonnesPage() {
 
     const idsActifs = (actifs ?? []).map((p) => p.id)
 
-    // 2. Récupérer les rattachements en cours pour ces personnes
     let occupees = new Set<string>()
     if (idsActifs.length > 0) {
       const { data: rattach, error: errR } = await supabase
@@ -64,7 +78,6 @@ export function PersonnesPage() {
       occupees = new Set((rattach ?? []).map((r) => r.logement_id))
     }
 
-    // 3. Récupérer tous les logements, puis filtrer
     const { data: tous, error: errL } = await supabase
       .from('logements')
       .select('id, nom_code')
@@ -77,7 +90,6 @@ export function PersonnesPage() {
     setLogementsDispo((tous ?? []).filter((l) => !occupees.has(l.id)))
   }, [])
 
-  // Recharge les logements dispo à chaque changement de la liste personnes
   useEffect(() => {
     chargerLogementsDispo()
   }, [chargerLogementsDispo, personnes])
@@ -107,20 +119,42 @@ export function PersonnesPage() {
     }
   }
 
-  async function basculerStatut(id: string, actif: boolean) {
+  async function desactiverPersonne(id: string) {
     setMessageSucces('')
     setMessageErreur('')
     try {
-      const { error } = await supabase
-        .from('personnes')
-        .update({ statut_actif: !actif })
-        .eq('id', id)
+      const { error } = await supabase.rpc('desactiver_personne', {
+        p_personne_id: id,
+      })
       if (error) throw new Error(error.message)
-      setMessageSucces('Statut mis à jour.')
+      setMessageSucces('Personne et compte(s) désactivés.')
       await recharger()
       await chargerLogementsDispo()
     } catch (e: unknown) {
       setMessageErreur(e instanceof Error ? e.message : 'Erreur inconnue.')
+    }
+  }
+
+  async function reactiverAvecLogement(id: string) {
+    setMessageReactivation('')
+    if (!logementReactivation) {
+      setMessageReactivation('Sélectionnez un logement.')
+      return
+    }
+    try {
+      const { error } = await supabase.rpc('reactiver_personne', {
+        p_personne_id: id,
+        p_logement_id: logementReactivation,
+      })
+      if (error) throw new Error(error.message)
+
+      setMessageSucces('Personne et compte(s) réactivés.')
+      setReactivationEnCours(null)
+      setLogementReactivation('')
+      await recharger()
+      await chargerLogementsDispo()
+    } catch (e: unknown) {
+      setMessageReactivation(e instanceof Error ? e.message : 'Erreur inconnue.')
     }
   }
 
@@ -141,7 +175,6 @@ export function PersonnesPage() {
       )
 
       if (error) {
-        // Essayer de lire le vrai message dans le corps de la réponse
         let message = error.message
         try {
           const ctx = (error as any).context
@@ -175,7 +208,7 @@ export function PersonnesPage() {
         <h2>Gestion des personnes</h2>
         <p style={{ color: '#666' }}>
           Créez une personne avec son index initial et son logement. Les personnes
-          existantes ne peuvent qu’être activées ou désactivées.
+          existantes peuvent être activées, désactivées, ou recevoir un compte.
         </p>
       </header>
 
@@ -209,10 +242,10 @@ export function PersonnesPage() {
                 type="text"
                 inputMode="numeric"
                 placeholder="10"
-              {...register('periode_depart_mois')}
+                {...register('periode_depart_mois')}
               />
-                {errors.periode_depart_mois && (
-              <span style={{ color: 'crimson' }}>{errors.periode_depart_mois.message}</span>
+              {errors.periode_depart_mois && (
+                <span style={{ color: 'crimson' }}>{errors.periode_depart_mois.message}</span>
               )}
             </label>
           </div>
@@ -262,12 +295,29 @@ export function PersonnesPage() {
       <section>
         <h3>Personnes existantes ({personnes.length})</h3>
 
+        {erreurEmails && (
+          <div
+            style={{
+              border: '1px solid #f59e0b',
+              background: '#fef3c7',
+              color: '#92400e',
+              padding: 12,
+              borderRadius: 6,
+              marginBottom: 12,
+              fontSize: 13,
+            }}
+          >
+            ⚠ Impossible de charger l’état des comptes : {erreurEmails}. Le bouton
+            « Créer un compte » est désactivé pour éviter les doublons.
+          </div>
+        )}
+
         {loading && <p>Chargement…</p>}
         {erreur && <p style={{ color: 'crimson' }}>Erreur : {erreur}</p>}
         {!loading && personnes.length === 0 && <p>Aucune personne enregistrée.</p>}
 
         {personnes.length > 0 && (
-          <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+          <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 14 }}>
             <thead>
               <tr style={{ textAlign: 'left', borderBottom: '1px solid #ddd' }}>
                 <th style={{ padding: 8 }}>Nom</th>
@@ -298,19 +348,31 @@ export function PersonnesPage() {
                     )}
                   </td>
                   <td style={{ padding: 8 }}>
-                    {p.compte_email ? (
+                    {erreurEmails ? (
+                      <span style={{ color: '#92400e' }}>⚠ État inconnu</span>
+                    ) : p.compte_email ? (
                       <span style={{ color: 'green' }}>✓ {p.compte_email}</span>
                     ) : (
                       <span style={{ color: '#888' }}>Aucun</span>
                     )}
                   </td>
-                  <td style={{ padding: 8 }}>
-                    <button
-                      type="button"
-                      onClick={() => basculerStatut(p.id, p.statut_actif)}
-                    >
-                      {p.statut_actif ? 'Désactiver' : 'Réactiver'}
-                    </button>
+                  <td style={{ padding: 8, display: 'flex', gap: 4 }}>
+                    {p.statut_actif ? (
+                      <button type="button" onClick={() => desactiverPersonne(p.id)}>
+                        Désactiver
+                      </button>
+                    ) : (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setReactivationEnCours(p.id)
+                          setLogementReactivation('')
+                          setMessageReactivation('')
+                        }}
+                      >
+                        Réactiver
+                      </button>
+                    )}
                     {!p.compte_email && (
                       <button
                         type="button"
@@ -320,7 +382,8 @@ export function PersonnesPage() {
                           setPassword('')
                           setMessageCompte('')
                         }}
-                        style={{ marginLeft: 4 }}
+                        disabled={!!erreurEmails}
+                        title={erreurEmails ? 'État des comptes indisponible' : undefined}
                       >
                         Créer un compte
                       </button>
@@ -331,10 +394,20 @@ export function PersonnesPage() {
             </tbody>
           </table>
         )}
+
+        {/* Formulaire de création de compte */}
         {compteEnCours && (
-          <section style={{ border: '1px solid #ddd', borderRadius: 8, padding: 16, marginTop: 16 }}>
+          <section
+            style={{
+              border: '1px solid #ddd',
+              borderRadius: 8,
+              padding: 16,
+              marginTop: 16,
+            }}
+          >
             <h4 style={{ marginTop: 0 }}>
-              Créer un compte pour {personnes.find((p) => p.id === compteEnCours)?.nom}
+              Créer un compte pour{' '}
+              {personnes.find((p) => p.id === compteEnCours)?.nom}
             </h4>
             <div style={{ display: 'grid', gap: 12, maxWidth: 400 }}>
               <label>
@@ -346,7 +419,7 @@ export function PersonnesPage() {
                 />
               </label>
               <label>
-               Mot de passe (8 caractères minimum)
+                Mot de passe (8 caractères minimum)
                 <input
                   type="password"
                   value={password}
@@ -357,11 +430,88 @@ export function PersonnesPage() {
                 <button type="button" onClick={() => creerCompte(compteEnCours)}>
                   Créer le compte
                 </button>
-                <button type="button" onClick={() => setCompteEnCours(null)}>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setCompteEnCours(null)
+                    setEmail('')
+                    setPassword('')
+                    setMessageCompte('')
+                  }}
+                >
                   Annuler
                 </button>
               </div>
               {messageCompte && <p style={{ color: 'crimson' }}>{messageCompte}</p>}
+            </div>
+          </section>
+        )}
+
+        {/* Formulaire de réactivation */}
+        {reactivationEnCours && (
+          <section
+            style={{
+              border: '1px solid #ddd',
+              borderRadius: 8,
+              padding: 16,
+              marginTop: 16,
+            }}
+          >
+            <h4 style={{ marginTop: 0 }}>
+              Réactiver{' '}
+              {personnes.find((p) => p.id === reactivationEnCours)?.nom}
+            </h4>
+
+            <p style={{ color: '#666', fontSize: 13 }}>
+              Choisissez le logement à réattribuer. Seuls les logements libres sont
+              proposés. Le rattachement précédent reste dans l’historique.
+            </p>
+
+            <div style={{ display: 'grid', gap: 12, maxWidth: 400 }}>
+              <label>
+                Logement
+                <select
+                  value={logementReactivation}
+                  onChange={(e) => setLogementReactivation(e.target.value)}
+                >
+                  <option value="">— Sélectionner —</option>
+                  {logementsDispo.map((l) => (
+                    <option key={l.id} value={l.id}>
+                      {l.nom_code}
+                    </option>
+                  ))}
+                </select>
+              </label>
+
+              {logementsDispo.length === 0 && (
+                <p style={{ fontSize: 12, color: '#888' }}>
+                  Aucun logement disponible. Libérez un logement d’abord.
+                </p>
+              )}
+
+              <div style={{ display: 'flex', gap: 8 }}>
+                <button
+                  type="button"
+                  onClick={() => reactiverAvecLogement(reactivationEnCours)}
+                  disabled={logementsDispo.length === 0}
+                >
+                  Réactiver
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setReactivationEnCours(null)
+                    setLogementReactivation('')
+                    setMessageReactivation('')
+                  }}
+                >
+                  Annuler
+                </button>
+              </div>
+
+              {messageReactivation && (
+                <p style={{ color: 'crimson' }}>{messageReactivation}</p>
+              )}
             </div>
           </section>
         )}

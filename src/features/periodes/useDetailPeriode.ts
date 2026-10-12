@@ -23,6 +23,13 @@ export type DetailPeriode = {
   lignes: LigneDetail[]
 }
 
+// Retourne le dernier jour du mois au format YYYY-MM-DD
+function dernierJourDuMois(annee: number, mois: number): string {
+  const d = new Date(annee, mois, 0) // mois 1-indexé → le jour 0 donne le dernier jour du mois précédent
+  const jour = String(d.getDate()).padStart(2, '0')
+  return `${annee}-${String(mois).padStart(2, '0')}-${jour}`
+}
+
 export function useDetailPeriode(periodeId: string | undefined) {
   const [detail, setDetail] = useState<DetailPeriode | null>(null)
   const [loading, setLoading] = useState(true)
@@ -44,16 +51,8 @@ export function useDetailPeriode(periodeId: string | undefined) {
       .eq('id', periodeId)
       .maybeSingle()
 
-    if (errP) {
-      setErreur(errP.message)
-      setLoading(false)
-      return
-    }
-    if (!periode) {
-      setErreur('Période introuvable.')
-      setLoading(false)
-      return
-    }
+    if (errP) { setErreur(errP.message); setLoading(false); return }
+    if (!periode) { setErreur('Période introuvable.'); setLoading(false); return }
 
     // 2. Les relevés + nom de personne
     const { data: releves, error: errR } = await supabase
@@ -69,24 +68,29 @@ export function useDetailPeriode(periodeId: string | undefined) {
       `)
       .eq('periode_id', periodeId)
 
-    if (errR) {
-      setErreur(errR.message)
-      setLoading(false)
-      return
-    }
+    if (errR) { setErreur(errR.message); setLoading(false); return }
 
-    // 3. Logements actuels
+    // 3. Logements applicables À LA DATE DE LA PÉRIODE
+    //    Date de référence : DERNIER JOUR du mois de la période
     const idsPersonnes = (releves ?? []).map((r: any) => r.personne_id)
     const logementMap = new Map<string, string>()
+
     if (idsPersonnes.length > 0) {
+      const dateRef = dernierJourDuMois(periode.annee, periode.mois)
+
       const { data: rattach } = await supabase
         .from('rattachements_personne_logement')
-        .select('personne_id, logements ( nom_code )')
-        .is('date_fin', null)
+        .select('personne_id, date_debut, date_fin, logements ( nom_code )')
         .in('personne_id', idsPersonnes)
+        .lte('date_debut', dateRef)
+        .or(`date_fin.is.null,date_fin.gte.${dateRef}`)
+        .order('date_debut', { ascending: false }) // Le plus récent en premier
 
+      // Prendre le premier rencontré pour chaque personne (le plus récent)
       ;(rattach ?? []).forEach((r: any) => {
-        logementMap.set(r.personne_id, r.logements?.nom_code ?? '—')
+        if (!logementMap.has(r.personne_id)) {
+          logementMap.set(r.personne_id, r.logements?.nom_code ?? '—')
+        }
       })
     }
 

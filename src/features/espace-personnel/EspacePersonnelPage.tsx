@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react'
+import { useNavigate } from 'react-router-dom'
 import { supabase } from '../../lib/supabase'
 import { useAuth } from '../auth/AuthContext'
 import { useMesDonnees } from './useMesDonnees'
@@ -17,9 +18,11 @@ function fmt(n: number | null, dec = 3): string {
 }
 
 export function EspacePersonnelPage() {
-  const { profil } = useAuth()
+  const { profil, signOut } = useAuth()
+  const navigate = useNavigate()
   const { lignes, loading, erreur } = useMesDonnees()
   const [nom, setNom] = useState<string>('')
+  const [deconnexionEnCours, setDeconnexionEnCours] = useState(false)
 
   useEffect(() => {
     async function chargerNom() {
@@ -34,6 +37,58 @@ export function EspacePersonnelPage() {
     chargerNom()
   }, [profil?.personne_id])
 
+  async function handleDeconnexion() {
+    setDeconnexionEnCours(true)
+    await signOut()
+    navigate('/login', { replace: true })
+  }
+
+  // Compte désactivé ou personne inactive → message bloquant avec bouton de déconnexion
+  const accesRefuse =
+    erreur !== null &&
+    (erreur.toLowerCase().includes('accès refusé') ||
+      erreur.toLowerCase().includes('désactivé'))
+
+  if (accesRefuse) {
+    return (
+      <div style={{ display: 'grid', gap: 16, maxWidth: 520, margin: '0 auto' }}>
+        <div
+          style={{
+            border: '1px solid crimson',
+            borderRadius: 8,
+            padding: 20,
+            background: '#fff5f5',
+          }}
+        >
+          <h2 style={{ marginTop: 0, color: 'crimson', fontSize: 18 }}>
+            Accès refusé
+          </h2>
+          <p style={{ color: '#333', marginBottom: 16 }}>
+            Votre compte ou votre fiche personne est désactivé. Vous ne pouvez
+            plus accéder à vos données. Contactez l’administrateur si vous pensez
+            qu’il s’agit d’une erreur.
+          </p>
+          <button
+            type="button"
+            onClick={handleDeconnexion}
+            disabled={deconnexionEnCours}
+            style={{
+              padding: '8px 16px',
+              background: '#0f172a',
+              color: '#fff',
+              border: 'none',
+              borderRadius: 6,
+              cursor: deconnexionEnCours ? 'not-allowed' : 'pointer',
+              opacity: deconnexionEnCours ? 0.6 : 1,
+            }}
+          >
+            {deconnexionEnCours ? 'Déconnexion…' : 'Se déconnecter'}
+          </button>
+        </div>
+      </div>
+    )
+  }
+
   return (
     <div style={{ display: 'grid', gap: 24 }}>
       <header>
@@ -45,11 +100,11 @@ export function EspacePersonnelPage() {
       </header>
 
       {loading && <p>Chargement…</p>}
-      {erreur && <p style={{ color: 'crimson' }}>Erreur : {erreur}</p>}
+      {erreur && !accesRefuse && (
+        <p style={{ color: 'crimson' }}>Erreur : {erreur}</p>
+      )}
       {!loading && !erreur && lignes.length === 0 && (
-        <p style={{ color: '#666' }}>
-          Aucun relevé enregistré pour l’instant.
-        </p>
+        <p style={{ color: '#666' }}>Aucun relevé enregistré pour l’instant.</p>
       )}
 
       {lignes.length > 0 && (

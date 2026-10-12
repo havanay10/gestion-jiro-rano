@@ -20,6 +20,7 @@ type Etat = {
   personnes: Personne[]
   loading: boolean
   erreur: string | null
+  erreurEmails: string | null
 }
 
 export function usePersonnes() {
@@ -27,10 +28,11 @@ export function usePersonnes() {
     personnes: [],
     loading: true,
     erreur: null,
+    erreurEmails: null,
   })
 
   const charger = useCallback(async () => {
-    setEtat((e) => ({ ...e, loading: true, erreur: null }))
+    setEtat((e) => ({ ...e, loading: true, erreur: null, erreurEmails: null }))
 
     // 1. Récupérer les personnes
     const { data: personnes, error: errP } = await supabase
@@ -39,7 +41,12 @@ export function usePersonnes() {
       .order('nom', { ascending: true })
 
     if (errP) {
-      setEtat({ personnes: [], loading: false, erreur: errP.message })
+      setEtat({
+        personnes: [],
+        loading: false,
+        erreur: errP.message,
+        erreurEmails: null,
+      })
       return
     }
 
@@ -50,7 +57,12 @@ export function usePersonnes() {
       .is('date_fin', null)
 
     if (errR) {
-      setEtat({ personnes: [], loading: false, erreur: errR.message })
+      setEtat({
+        personnes: [],
+        loading: false,
+        erreur: errR.message,
+        erreurEmails: null,
+      })
       return
     }
 
@@ -62,7 +74,12 @@ export function usePersonnes() {
       .not('personne_id', 'is', null)
 
     if (errProf) {
-      setEtat({ personnes: [], loading: false, erreur: errProf.message })
+      setEtat({
+        personnes: [],
+        loading: false,
+        erreur: errProf.message,
+        erreurEmails: null,
+      })
       return
     }
 
@@ -74,11 +91,15 @@ export function usePersonnes() {
     // 4. Récupérer les emails des utilisateurs via une RPC admin
     const userIds = Array.from(personneToUserId.values()).map((v) => v.userId)
     let emailParUserId = new Map<string, string>()
+    let erreurEmails: string | null = null
+
     if (userIds.length > 0) {
-      const { data: emails } = await supabase.rpc('get_user_emails', {
+      const { data: emails, error: errEmails } = await supabase.rpc('get_user_emails', {
         user_ids: userIds,
       })
-      if (emails) {
+      if (errEmails) {
+        erreurEmails = errEmails.message
+      } else if (emails) {
         emailParUserId = new Map(
           (emails as Array<{ id: string; email: string }>).map((e) => [e.id, e.email])
         )
@@ -92,7 +113,12 @@ export function usePersonnes() {
       .order('created_at', { ascending: false })
 
     if (errRel) {
-      setEtat({ personnes: [], loading: false, erreur: errRel.message })
+      setEtat({
+        personnes: [],
+        loading: false,
+        erreur: errRel.message,
+        erreurEmails: null,
+      })
       return
     }
 
@@ -134,7 +160,7 @@ export function usePersonnes() {
       }
     })
 
-    setEtat({ personnes: enrichies, loading: false, erreur: null })
+    setEtat({ personnes: enrichies, loading: false, erreur: null, erreurEmails })
   }, [])
 
   useEffect(() => {

@@ -1,20 +1,50 @@
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
 
-const corsHeaders = {
-  'Access-Control-Allow-Origin': '*',
-  'Access-Control-Allow-Headers': 'authorization, content-type, x-client-info, apikey',
+// Origines autorisées (à adapter à votre domaine de production)
+const ORIGINES_AUTORISEES = [
+  'http://localhost:5173',
+  'http://localhost:4173',
+  // Remplacez par votre URL Vercel réelle
+  'https://gestion-jiro-rano.vercel.app/',
+]
+
+function corsPour(req: Request): Record<string, string> {
+  const origin = req.headers.get('Origin') ?? ''
+  const autorise = ORIGINES_AUTORISEES.includes(origin) ? origin : ORIGINES_AUTORISEES[0]
+  return {
+    'Access-Control-Allow-Origin': autorise,
+    'Access-Control-Allow-Methods': 'POST, OPTIONS',
+    'Access-Control-Allow-Headers':
+      'authorization, content-type, x-client-info, apikey, x-supabase-api-version, prefer',
+    'Access-Control-Max-Age': '86400',
+    'Vary': 'Origin',
+  }
 }
 
 Deno.serve(async (req) => {
+  const cors = corsPour(req)
+
+  // Précontrôle CORS
   if (req.method === 'OPTIONS') {
-    return new Response('ok', { headers: corsHeaders })
+    return new Response(null, { status: 204, headers: cors })
+  }
+
+  // Seule la méthode POST est acceptée
+  if (req.method !== 'POST') {
+    return new Response(
+      JSON.stringify({ ok: false, error: 'Méthode non autorisée.' }),
+      { status: 405, headers: { ...cors, 'Content-Type': 'application/json' } }
+    )
   }
 
   try {
+    // 1. Vérifier la présence du JWT
     const authHeader = req.headers.get('Authorization')
-    if (!authHeader) throw new Error('Non authentifié.')
+    if (!authHeader || !authHeader.startsWith('Bearer ')) {
+      throw new Error('Non authentifié.')
+    }
 
-    // Client avec le JWT de l'appelant (pour vérifier qu'il est admin)
+    // 2. Vérifier que l'appelant est admin
     const supabaseUser = createClient(
       Deno.env.get('SUPABASE_URL')!,
       Deno.env.get('SUPABASE_ANON_KEY')!,
@@ -23,8 +53,11 @@ Deno.serve(async (req) => {
 
     const { data: isAdmin, error: errAdmin } = await supabaseUser.rpc('est_admin')
     if (errAdmin) throw new Error(errAdmin.message)
-    if (!isAdmin) throw new Error('Accès refusé. Seul un administrateur peut créer un compte.')
+    if (!isAdmin) {
+      throw new Error('Accès refusé. Seul un administrateur peut créer un compte.')
+    }
 
+    // 3. Valider les paramètres
     const { email, password, personne_id } = await req.json()
     if (!email || !password || !personne_id) {
       throw new Error('Email, mot de passe et personne_id sont obligatoires.')
@@ -33,13 +66,12 @@ Deno.serve(async (req) => {
       throw new Error('Le mot de passe doit contenir au moins 8 caractères.')
     }
 
-    // Client admin (service_role) pour créer l'utilisateur
+    // 4. Créer l'utilisateur Auth avec le service_role
     const supabaseAdmin = createClient(
       Deno.env.get('SUPABASE_URL')!,
       Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!
     )
 
-    // 1. Créer l'utilisateur Auth
     const { data: newUser, error: authError } = await supabaseAdmin.auth.admin.createUser({
       email,
       password,
@@ -48,27 +80,26 @@ Deno.serve(async (req) => {
     if (authError) throw new Error(authError.message)
     if (!newUser?.user) throw new Error('Création de l’utilisateur impossible.')
 
-    // 2. Créer le profil lié à la personne
+    // 5. Créer le profil (rollback si échec)
     const { error: profilError } = await supabaseAdmin.rpc('creer_profil_personnel', {
       p_user_id: newUser.user.id,
       p_personne_id: personne_id,
     })
 
     if (profilError) {
-      // Rollback : on supprime l'utilisateur Auth pour ne pas laisser un compte orphelin
       await supabaseAdmin.auth.admin.deleteUser(newUser.user.id)
       throw new Error(profilError.message)
     }
 
     return new Response(
       JSON.stringify({ ok: true, user_id: newUser.user.id, email }),
-      { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      { headers: { ...cors, 'Content-Type': 'application/json' } }
     )
   } catch (e: unknown) {
     const message = e instanceof Error ? e.message : 'Erreur inconnue'
     return new Response(
       JSON.stringify({ ok: false, error: message }),
-      { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      { status: 400, headers: { ...cors, 'Content-Type': 'application/json' } }
     )
   }
 })
