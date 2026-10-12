@@ -11,6 +11,9 @@ export type Personne = {
   logement_id: string | null
   logement_nom: string | null
   dernier_index: number | null
+  // Compte personnel lié (si existant)
+  compte_email: string | null
+  compte_actif: boolean | null
 }
 
 type Etat = {
@@ -51,7 +54,38 @@ export function usePersonnes() {
       return
     }
 
-    // 3. Récupérer tous les relevés pour calculer le dernier index
+    // 3. Récupérer les profils personnels liés
+    const { data: profils, error: errProf } = await supabase
+      .from('profils')
+      .select('personne_id, id, actif')
+      .eq('role', 'personnel')
+      .not('personne_id', 'is', null)
+
+    if (errProf) {
+      setEtat({ personnes: [], loading: false, erreur: errProf.message })
+      return
+    }
+
+    const personneToUserId = new Map<string, { userId: string; actif: boolean }>()
+    ;(profils ?? []).forEach((p: any) => {
+      personneToUserId.set(p.personne_id, { userId: p.id, actif: p.actif })
+    })
+
+    // 4. Récupérer les emails des utilisateurs via une RPC admin
+    const userIds = Array.from(personneToUserId.values()).map((v) => v.userId)
+    let emailParUserId = new Map<string, string>()
+    if (userIds.length > 0) {
+      const { data: emails } = await supabase.rpc('get_user_emails', {
+        user_ids: userIds,
+      })
+      if (emails) {
+        emailParUserId = new Map(
+          (emails as Array<{ id: string; email: string }>).map((e) => [e.id, e.email])
+        )
+      }
+    }
+
+    // 5. Récupérer tous les relevés pour calculer le dernier index
     const { data: releves, error: errRel } = await supabase
       .from('releves')
       .select('personne_id, index_total, periode_id, est_initial, created_at')
@@ -62,7 +96,7 @@ export function usePersonnes() {
       return
     }
 
-    // 4. Assembler
+    // 6. Assembler les données
     const rattachMap = new Map<string, { logement_id: string; logement_nom: string }>()
     ;(rattach ?? []).forEach((r: any) => {
       rattachMap.set(r.personne_id, {
@@ -80,6 +114,12 @@ export function usePersonnes() {
 
     const enrichies: Personne[] = (personnes ?? []).map((p: any) => {
       const rat = rattachMap.get(p.id)
+      const profilInfo = personneToUserId.get(p.id)
+      const compte_email = profilInfo
+        ? (emailParUserId.get(profilInfo.userId) ?? null)
+        : null
+      const compte_actif = profilInfo ? profilInfo.actif : null
+
       return {
         id: p.id,
         nom: p.nom,
@@ -89,6 +129,8 @@ export function usePersonnes() {
         logement_id: rat?.logement_id ?? null,
         logement_nom: rat?.logement_nom ?? null,
         dernier_index: dernierIndexMap.get(p.id) ?? null,
+        compte_email,
+        compte_actif,
       }
     })
 

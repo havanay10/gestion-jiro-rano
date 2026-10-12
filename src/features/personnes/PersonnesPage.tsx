@@ -13,7 +13,10 @@ export function PersonnesPage() {
   const [logementsDispo, setLogementsDispo] = useState<LogementOption[]>([])
   const [messageSucces, setMessageSucces] = useState('')
   const [messageErreur, setMessageErreur] = useState('')
-
+  const [compteEnCours, setCompteEnCours] = useState<string | null>(null) // personne_id
+  const [email, setEmail] = useState('')
+  const [password, setPassword] = useState('')
+  const [messageCompte, setMessageCompte] = useState('')
   const {
     register,
     handleSubmit,
@@ -118,6 +121,51 @@ export function PersonnesPage() {
       await chargerLogementsDispo()
     } catch (e: unknown) {
       setMessageErreur(e instanceof Error ? e.message : 'Erreur inconnue.')
+    }
+  }
+
+  async function creerCompte(personne_id: string) {
+    setMessageCompte('')
+    if (!email || !password) {
+      setMessageCompte('Email et mot de passe obligatoires.')
+      return
+    }
+    if (password.length < 8) {
+      setMessageCompte('Mot de passe : au moins 8 caractères.')
+      return
+    }
+    try {
+      const { data, error } = await supabase.functions.invoke(
+        'create-personnel-account',
+        { body: { email, password, personne_id } }
+      )
+
+      if (error) {
+        // Essayer de lire le vrai message dans le corps de la réponse
+        let message = error.message
+        try {
+          const ctx = (error as any).context
+          if (ctx && typeof ctx.json === 'function') {
+            const body = await ctx.json()
+            message = body?.error ?? message
+          }
+        } catch {
+          // ignore
+        }
+        throw new Error(message)
+      }
+
+      if (!data?.ok) {
+        throw new Error(data?.error ?? 'Erreur inconnue.')
+      }
+
+      setMessageCompte('Compte créé avec succès.')
+      setCompteEnCours(null)
+      setEmail('')
+      setPassword('')
+      await recharger()
+    } catch (e: unknown) {
+      setMessageCompte(e instanceof Error ? e.message : 'Erreur inconnue.')
     }
   }
 
@@ -227,6 +275,7 @@ export function PersonnesPage() {
                 <th style={{ padding: 8 }}>Période de départ</th>
                 <th style={{ padding: 8 }}>Dernier index</th>
                 <th style={{ padding: 8 }}>Statut</th>
+                <th style={{ padding: 8 }}>Compte</th>
                 <th style={{ padding: 8 }}>Action</th>
               </tr>
             </thead>
@@ -249,17 +298,72 @@ export function PersonnesPage() {
                     )}
                   </td>
                   <td style={{ padding: 8 }}>
+                    {p.compte_email ? (
+                      <span style={{ color: 'green' }}>✓ {p.compte_email}</span>
+                    ) : (
+                      <span style={{ color: '#888' }}>Aucun</span>
+                    )}
+                  </td>
+                  <td style={{ padding: 8 }}>
                     <button
                       type="button"
                       onClick={() => basculerStatut(p.id, p.statut_actif)}
                     >
                       {p.statut_actif ? 'Désactiver' : 'Réactiver'}
                     </button>
+                    {!p.compte_email && (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setCompteEnCours(p.id)
+                          setEmail('')
+                          setPassword('')
+                          setMessageCompte('')
+                        }}
+                        style={{ marginLeft: 4 }}
+                      >
+                        Créer un compte
+                      </button>
+                    )}
                   </td>
                 </tr>
               ))}
             </tbody>
           </table>
+        )}
+        {compteEnCours && (
+          <section style={{ border: '1px solid #ddd', borderRadius: 8, padding: 16, marginTop: 16 }}>
+            <h4 style={{ marginTop: 0 }}>
+              Créer un compte pour {personnes.find((p) => p.id === compteEnCours)?.nom}
+            </h4>
+            <div style={{ display: 'grid', gap: 12, maxWidth: 400 }}>
+              <label>
+                Email
+                <input
+                  type="email"
+                  value={email}
+                  onChange={(e) => setEmail(e.target.value)}
+                />
+              </label>
+              <label>
+               Mot de passe (8 caractères minimum)
+                <input
+                  type="password"
+                  value={password}
+                  onChange={(e) => setPassword(e.target.value)}
+                />
+              </label>
+              <div style={{ display: 'flex', gap: 8 }}>
+                <button type="button" onClick={() => creerCompte(compteEnCours)}>
+                  Créer le compte
+                </button>
+                <button type="button" onClick={() => setCompteEnCours(null)}>
+                  Annuler
+                </button>
+              </div>
+              {messageCompte && <p style={{ color: 'crimson' }}>{messageCompte}</p>}
+            </div>
+          </section>
         )}
       </section>
     </div>
