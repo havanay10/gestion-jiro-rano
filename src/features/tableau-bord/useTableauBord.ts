@@ -12,6 +12,27 @@ export type DernierePeriode = {
   conso_jiro: number
   quantite_rano: number
   nb_personnes: number
+  certifiee: boolean
+}
+
+export type PeriodeResume = {
+  id: string
+  annee: number
+  mois: number
+  montant_jiro: number
+  montant_rano: number
+  conso_jiro: number
+  quantite_rano: number
+  nb_personnes: number
+  certifiee: boolean
+}
+
+export type PointGraphique = {
+  label: string
+  annee: number
+  mois: number
+  jiro: number
+  rano: number
 }
 
 export type TableauBord = {
@@ -20,18 +41,19 @@ export type TableauBord = {
   nbPeriodes: number
   totalJiro: number
   totalRano: number
-  totalConsoJiro: number
-  totalQuantiteRano: number
+  moyenneJiro6m: number
+  moyenneRano6m: number
   dernierePeriode: DernierePeriode | null
-  dernieresPeriodes: {
-    id: string
-    annee: number
-    mois: number
-    montant_jiro: number
-    montant_rano: number
-    nb_personnes: number
-  }[]
+  periodes: PeriodeResume[]
+  pointsGraphique: PointGraphique[]
 }
+
+const MOIS_COURTS = [
+  '', 'Jan', 'Fév', 'Mar', 'Avr', 'Mai', 'Juin',
+  'Juil', 'Août', 'Sep', 'Oct', 'Nov', 'Déc',
+]
+
+const TOLERANCE = 1e-6
 
 export function useTableauBord() {
   const [data, setData] = useState<TableauBord | null>(null)
@@ -61,10 +83,12 @@ export function useTableauBord() {
         return
       }
 
-      // 2. Toutes les périodes (récap + totaux)
+      // 2. Toutes les périodes
       const { data: periodes, error: errP } = await supabase
         .from('periodes')
-        .select('id, annee, mois, montant_jiro, montant_rano, cout_unitaire_jiro, cout_unitaire_rano')
+        .select(
+          'id, annee, mois, montant_jiro, montant_rano, cout_unitaire_jiro, cout_unitaire_rano'
+        )
         .order('annee', { ascending: false })
         .order('mois', { ascending: false })
 
@@ -74,10 +98,10 @@ export function useTableauBord() {
         return
       }
 
-      // 3. Relevés pour calculs de conso / quantités et nb personnes par période
+      // 3. Tous les relevés (pour calculer conso, quantités, équilibre)
       const { data: releves, error: errR } = await supabase
         .from('releves')
-        .select('periode_id, consommation, quantite_rano')
+        .select('periode_id, consommation, quantite_rano, part_jiro, part_rano')
         .not('periode_id', 'is', null)
 
       if (errR) {
@@ -86,69 +110,100 @@ export function useTableauBord() {
         return
       }
 
-      const totalJiro = (periodes ?? []).reduce(
-        (s, p) => s + Number(p.montant_jiro),
-        0
-      )
-      const totalRano = (periodes ?? []).reduce(
-        (s, p) => s + Number(p.montant_rano),
-        0
-      )
-      const totalConsoJiro = (releves ?? []).reduce(
-        (s, r) => s + Number(r.consommation ?? 0),
-        0
-      )
-      const totalQuantiteRano = (releves ?? []).reduce(
-        (s, r) => s + Number(r.quantite_rano ?? 0),
-        0
-      )
-
-      // 4. Dernière période + stats
-      const derniere = periodes && periodes.length > 0 ? periodes[0] : null
-
-      let dernierePeriode: DernierePeriode | null = null
-      if (derniere) {
-        const relevésDernière = (releves ?? []).filter(
-          (r) => r.periode_id === derniere.id
-        )
-        dernierePeriode = {
-          id: derniere.id,
-          annee: derniere.annee,
-          mois: derniere.mois,
-          montant_jiro: Number(derniere.montant_jiro),
-          montant_rano: Number(derniere.montant_rano),
-          cout_unitaire_jiro:
-            derniere.cout_unitaire_jiro === null
-              ? null
-              : Number(derniere.cout_unitaire_jiro),
-          cout_unitaire_rano:
-            derniere.cout_unitaire_rano === null
-              ? null
-              : Number(derniere.cout_unitaire_rano),
-          conso_jiro: relevésDernière.reduce(
-            (s, r) => s + Number(r.consommation ?? 0),
-            0
-          ),
-          quantite_rano: relevésDernière.reduce(
-            (s, r) => s + Number(r.quantite_rano ?? 0),
-            0
-          ),
-          nb_personnes: relevésDernière.length,
+      // Regrouper par période
+      const parPeriode = new Map<
+        string,
+        { conso: number; rano: number; nb: number; sumJiro: number; sumRano: number }
+      >()
+      ;(releves ?? []).forEach((r: any) => {
+        const existing = parPeriode.get(r.periode_id) ?? {
+          conso: 0,
+          rano: 0,
+          nb: 0,
+          sumJiro: 0,
+          sumRano: 0,
         }
-      }
+        existing.conso += Number(r.consommation ?? 0)
+        existing.rano += Number(r.quantite_rano ?? 0)
+        existing.nb += 1
+        existing.sumJiro += Number(r.part_jiro ?? 0)
+        existing.sumRano += Number(r.part_rano ?? 0)
+        parPeriode.set(r.periode_id, existing)
+      })
 
-      // 5. Récap des 6 dernières
-      const dernieresPeriodes = (periodes ?? []).slice(0, 6).map((p) => {
-        const nb = (releves ?? []).filter((r) => r.periode_id === p.id).length
+      const totalJiro = (periodes ?? []).reduce((s, p) => s + Number(p.montant_jiro), 0)
+      const totalRano = (periodes ?? []).reduce((s, p) => s + Number(p.montant_rano), 0)
+
+      // 4. Liste enrichie
+      const periodesEnrichies: PeriodeResume[] = (periodes ?? []).map((p) => {
+        const stats = parPeriode.get(p.id)
+        const mJiro = Number(p.montant_jiro)
+        const mRano = Number(p.montant_rano)
+        const certifiee =
+          Math.abs((stats?.sumJiro ?? 0) - mJiro) < TOLERANCE &&
+          Math.abs((stats?.sumRano ?? 0) - mRano) < TOLERANCE
         return {
           id: p.id,
           annee: p.annee,
           mois: p.mois,
-          montant_jiro: Number(p.montant_jiro),
-          montant_rano: Number(p.montant_rano),
-          nb_personnes: nb,
+          montant_jiro: mJiro,
+          montant_rano: mRano,
+          conso_jiro: stats?.conso ?? 0,
+          quantite_rano: stats?.rano ?? 0,
+          nb_personnes: stats?.nb ?? 0,
+          certifiee,
         }
       })
+
+      // 5. Moyennes sur les 6 dernières périodes
+      const sixDernieres = periodesEnrichies.slice(0, 6)
+      const moyenneJiro6m =
+        sixDernieres.length > 0
+          ? sixDernieres.reduce((s, p) => s + p.montant_jiro, 0) / sixDernieres.length
+          : 0
+      const moyenneRano6m =
+        sixDernieres.length > 0
+          ? sixDernieres.reduce((s, p) => s + p.montant_rano, 0) / sixDernieres.length
+          : 0
+
+      // 6. Points du graphique (6 derniers mois, dans l'ordre chronologique)
+      const pointsGraphique: PointGraphique[] = sixDernieres
+        .slice()
+        .reverse()
+        .map((p) => ({
+          label: `${MOIS_COURTS[p.mois]} ${p.annee}`,
+          annee: p.annee,
+          mois: p.mois,
+          jiro: p.montant_jiro,
+          rano: p.montant_rano,
+        }))
+
+      // 7. Dernière période (avec coûts unitaires)
+      let dernierePeriode: DernierePeriode | null = null
+      if (periodes && periodes.length > 0) {
+        const d = periodes[0]
+        const stats = parPeriode.get(d.id)
+        const mJiro = Number(d.montant_jiro)
+        const mRano = Number(d.montant_rano)
+        const certifiee =
+          Math.abs((stats?.sumJiro ?? 0) - mJiro) < TOLERANCE &&
+          Math.abs((stats?.sumRano ?? 0) - mRano) < TOLERANCE
+        dernierePeriode = {
+          id: d.id,
+          annee: d.annee,
+          mois: d.mois,
+          montant_jiro: mJiro,
+          montant_rano: mRano,
+          cout_unitaire_jiro:
+            d.cout_unitaire_jiro === null ? null : Number(d.cout_unitaire_jiro),
+          cout_unitaire_rano:
+            d.cout_unitaire_rano === null ? null : Number(d.cout_unitaire_rano),
+          conso_jiro: stats?.conso ?? 0,
+          quantite_rano: stats?.rano ?? 0,
+          nb_personnes: stats?.nb ?? 0,
+          certifiee,
+        }
+      }
 
       setData({
         nbPersonnesActives: persRes.count ?? 0,
@@ -156,10 +211,11 @@ export function useTableauBord() {
         nbPeriodes: perRes.count ?? 0,
         totalJiro,
         totalRano,
-        totalConsoJiro,
-        totalQuantiteRano,
+        moyenneJiro6m,
+        moyenneRano6m,
         dernierePeriode,
-        dernieresPeriodes,
+        periodes: periodesEnrichies,
+        pointsGraphique,
       })
       setLoading(false)
     }
