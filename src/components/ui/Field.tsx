@@ -42,7 +42,7 @@ export function Input({ erreur, iconeGauche, suffixe, className = '', ...rest }:
     return (
       <div className="champ-icone">
         <span className="champ-icone-gauche">{iconeGauche}</span>
-        <input className={classe} {...rest} />
+        <input className={classe} {...rest} aria-invalid={erreur ? true : rest['aria-invalid']} />
       </div>
     )
   }
@@ -50,13 +50,13 @@ export function Input({ erreur, iconeGauche, suffixe, className = '', ...rest }:
   if (suffixe) {
     return (
       <div className="champ-groupe">
-        <input className={classe} {...rest} />
+        <input className={classe} {...rest} aria-invalid={erreur ? true : rest['aria-invalid']} />
         <span className="champ-suffixe">{suffixe}</span>
       </div>
     )
   }
 
-  return <input className={classe} {...rest} />
+  return <input className={classe} {...rest} aria-invalid={erreur ? true : rest['aria-invalid']} />
 }
 
 /* ---------- Select stylé ---------- */
@@ -70,7 +70,7 @@ export function Select({ erreur, className = '', children, ...rest }: SelectProp
   if (erreur) classe += ' champ-saisie-erreur'
   if (className) classe += ' ' + className
   return (
-    <select className={classe} {...rest}>
+    <select className={classe} {...rest} aria-invalid={erreur ? true : rest['aria-invalid']}>
       {children}
     </select>
   )

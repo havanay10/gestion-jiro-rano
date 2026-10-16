@@ -2,6 +2,7 @@ import { useState } from 'react'
 import { useHistorique } from './useHistorique'
 import { exporterPeriodeCsv } from './exportCsv'
 import { Link } from 'react-router-dom';
+import { PageHeader, CardEntete, Button, Badge, Message, EmptyState, LoadingState, Table } from '../../components/ui'
 
 const moisFrancais = [
   '', 'Janvier', 'Février', 'Mars', 'Avril', 'Mai', 'Juin',
@@ -10,7 +11,7 @@ const moisFrancais = [
 
 function arrondi(n: number): string {
   return new Intl.NumberFormat('fr-FR', {
-    minimumFractionDigits: 0,
+    minimumFractionDigits: 6,
     maximumFractionDigits: 6,
   }).format(n)
 }
@@ -51,17 +52,16 @@ export function HistoriquePage() {
   }
 
   return (
-    <div style={{ display: 'grid', gap: 24 }}>
-      <header>
-        <h2 style={{ margin: 0 }}>Historique des périodes</h2>
-        <p style={{ color: '#666', marginTop: 4 }}>
-          Consultation chronologique et export CSV.
-        </p>
-      </header>
+    <div className="page">
+      <PageHeader
+        surtitre="CONSULTATION ET EXPORT"
+        titre="Historique des périodes"
+        sousTitre="Consultez les répartitions enregistrées et exportez les périodes certifiées."
+      />
 
       {/* Filtres */}
-      <section style={{ border: '1px solid #ddd', borderRadius: 8, padding: 16 }}>
-        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 16, alignItems: 'flex-end' }}>
+      <section className="carte carte-compacte">
+        <div className="grille-filtres">
           <label>
             Année
             <select
@@ -107,110 +107,40 @@ export function HistoriquePage() {
             </select>
           </label>
 
-          <button type="button" onClick={reinitialiser}>
+          <Button type="button" variante="fantome" onClick={reinitialiser}>
             Réinitialiser
-          </button>
+          </Button>
         </div>
 
-        <p style={{ marginTop: 12, color: '#666', fontSize: 13 }}>
+        <p className="historique-compte">
           {periodes.length} période{periodes.length > 1 ? 's' : ''} affichée
           {periodes.length > 1 ? 's' : ''}
         </p>
       </section>
 
       {/* Message d'erreur */}
-      {messageErreur && (
-        <div
-          style={{
-            border: '1px solid crimson',
-            borderRadius: 8,
-            padding: 12,
-            background: '#fff5f5',
-            color: 'crimson',
-          }}
-        >
-          {messageErreur}
-        </div>
-      )}
+      {messageErreur && <Message variante="erreur" titre="Échec de l’export">{messageErreur}</Message>}
 
       {/* Liste */}
-      <section>
-        {loading && <p>Chargement…</p>}
-        {erreur && <p style={{ color: 'crimson' }}>Erreur : {erreur}</p>}
-        {!loading && !erreur && periodes.length === 0 && (
-          <p style={{ color: '#666' }}>Aucune période enregistrée pour ces filtres.</p>
-        )}
-
-        {periodes.length > 0 && (
-          <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 14 }}>
-            <thead>
-              <tr style={{ textAlign: 'left', borderBottom: '1px solid #ddd' }}>
-                <th style={{ padding: 8 }}>Période</th>
-                <th style={{ padding: 8 }}>Facture Jiro</th>
-                <th style={{ padding: 8 }}>Facture Rano</th>
-                <th style={{ padding: 8 }}>Total</th>
-                <th style={{ padding: 8 }}>Personnes</th>
-                <th style={{ padding: 8 }}>État</th>
-                <th style={{ padding: 8 }}>Actions</th>
-              </tr>
-            </thead>
-            <tbody>
-              {periodes.map((p) => {
-                const total = p.montant_jiro + p.montant_rano
-                return (
-                  <tr key={p.id} style={{ borderBottom: '1px solid #f0f0f0' }}>
-                    <td style={{ padding: 12 }}>
-                      <div style={{ fontWeight: 600 }}>
-                        {moisFrancais[p.mois]} {p.annee}
-                      </div>
-                      <div style={{ fontSize: 12, color: '#888' }}>
-                        Période {p.annee}-{String(p.mois).padStart(2, '0')}
-                      </div>
-                    </td>
-                    <td style={{ padding: 12 }}>{arrondi(p.montant_jiro)} Ar</td>
-                    <td style={{ padding: 12 }}>{arrondi(p.montant_rano)} Ar</td>
-                    <td style={{ padding: 12, fontWeight: 600 }}>{arrondi(total)} Ar</td>
-                    <td style={{ padding: 12 }}>{p.nb_personnes}</td>
-                    <td style={{ padding: 12 }}>
-                      {p.equilibre ? (
-                        <span style={{ color: 'green' }}>✓ Vérifiée</span>
-                      ) : (
-                        <span style={{ color: 'crimson' }}>✗ Déséquilibre</span>
-                      )}
-                    </td>
-                    <td style={{ padding: 12, display: 'flex', gap: 8 }}>
-                        <Link
-                            to={`/admin/periodes/${p.id}`}
-                            style={{
-                            textDecoration: 'none',
-                            padding: '6px 10px',
-                            borderRadius: 6,
-                            border: '1px solid #ccc',
-                            fontSize: 13,
-                            color: '#333',
-                            }}
-                        >
-                           Voir le détail
-                        </Link>
-                        <button
-                            type="button"
-                            onClick={() => exporter(p.id)}
-                            disabled={exportEnCours === p.id || !p.equilibre}
-                            title={
-                            p.equilibre
-                                ? 'Exporter en CSV'
-                                : 'Export bloqué : la répartition n’est pas équilibrée.'
-                            }
-                        >
-                            {exportEnCours === p.id ? 'Export…' : 'Exporter CSV'}
-                        </button>
-                    </td>
-                  </tr>
-                )
-              })}
-            </tbody>
-          </table>
-        )}
+      <section className="carte carte-sans-padding">
+        <CardEntete titre="Périodes enregistrées" sousTitre={`${periodes.length} période${periodes.length === 1 ? '' : 's'} affichée${periodes.length === 1 ? '' : 's'}`} />
+        {loading && <LoadingState />}
+        {erreur && <Message variante="erreur" titre="Erreur de chargement">{erreur}</Message>}
+        {!loading && !erreur && periodes.length === 0 && <EmptyState titre="Aucune période trouvée" texte="Modifiez les filtres ou réinitialisez la recherche." />}
+        {!loading && !erreur && periodes.length > 0 && <Table
+          libelle="Historique des périodes"
+          lignes={periodes}
+          cleLigne={(p) => p.id}
+          colonnes={[
+            { cle: 'periode', titre: 'Période', afficher: (p) => <><strong>{moisFrancais[p.mois]} {p.annee}</strong><div className="col-secondaire">{p.annee}-{String(p.mois).padStart(2, '0')}</div></> },
+            { cle: 'jiro', titre: 'Facture Jiro', alignement: 'droite', afficher: (p) => `${arrondi(p.montant_jiro)} Ar` },
+            { cle: 'rano', titre: 'Facture Rano', alignement: 'droite', afficher: (p) => `${arrondi(p.montant_rano)} Ar` },
+            { cle: 'total', titre: 'Total', alignement: 'droite', afficher: (p) => <strong>{arrondi(p.montant_jiro + p.montant_rano)} Ar</strong> },
+            { cle: 'personnes', titre: 'Personnes', alignement: 'centre', afficher: (p) => p.nb_personnes },
+            { cle: 'etat', titre: 'État', afficher: (p) => p.equilibre ? <Badge variante="succes">✓ Vérifiée</Badge> : <Badge variante="erreur">Déséquilibre</Badge> },
+            { cle: 'actions', titre: 'Actions', afficher: (p) => <div className="tableau-actions"><Link to={`/admin/periodes/${p.id}`} className="btn btn-sm">Voir le détail</Link><Button type="button" taille="sm" variante="primaire" onClick={() => exporter(p.id)} disabled={exportEnCours === p.id || !p.equilibre} title={p.equilibre ? 'Exporter en CSV' : 'Export bloqué : période non certifiée.'}>{exportEnCours === p.id ? 'Export…' : 'Exporter CSV'}</Button></div> },
+          ]}
+        />}
       </section>
     </div>
   )

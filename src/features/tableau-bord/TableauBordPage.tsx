@@ -2,6 +2,9 @@ import { useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import { useTableauBord } from './useTableauBord'
 import { GraphiqueFactures } from './GraphiqueFactures'
+import { useDetailPeriode } from '../periodes/useDetailPeriode'
+import { Icone } from '../../components/ui/Icone'
+import type { ReactNode } from 'react'
 import {
   PageHeader,
   Card,
@@ -11,61 +14,40 @@ import {
   Button,
   EmptyState,
   LoadingState,
+  Message,
+  Table,
 } from '../../components/ui'
 
 const MOIS_LONGS = [
   '', 'Janvier', 'Février', 'Mars', 'Avril', 'Mai', 'Juin',
   'Juillet', 'Août', 'Septembre', 'Octobre', 'Novembre', 'Décembre',
 ]
+const MOIS_COURTS = ['', 'Jan', 'Fév', 'Mar', 'Avr', 'Mai', 'Juin', 'Juil', 'Août', 'Sep', 'Oct', 'Nov', 'Déc']
 
-const PERIODES_PAR_PAGE = 5
+const PERIODES_PAR_PAGE = 4
 
 /* ---------- Helpers de formatage ---------- */
 
-function fmt0(n: number): string {
-  return new Intl.NumberFormat('fr-FR', { maximumFractionDigits: 0 }).format(n) + ' Ar'
+function fmt6(n: number): string {
+  return fmtNombre(n) + ' Ar'
 }
 
-function fmt6(n: number): string {
-  return (
-    new Intl.NumberFormat('fr-FR', {
-      minimumFractionDigits: 6,
-      maximumFractionDigits: 6,
-    })
-      .format(n)
-      .replace(/\u202F/g, ' ') + ' Ar'
-  )
+function fmtNombre(n: number): string {
+  return new Intl.NumberFormat('fr-FR', {
+    minimumFractionDigits: 6,
+    maximumFractionDigits: 6,
+  }).format(n).replace(/\u202F/g, ' ')
 }
 
 function fmtKwh(n: number): string {
   return (
-    new Intl.NumberFormat('fr-FR', {
-      minimumFractionDigits: 6,
-      maximumFractionDigits: 6,
-    }).format(n) + ' kWh'
+    fmtNombre(n) + ' kWh'
   )
 }
 
 function fmtUnites(n: number): string {
   return (
-    new Intl.NumberFormat('fr-FR', {
-      minimumFractionDigits: 6,
-      maximumFractionDigits: 6,
-    }).format(n) + ' u'
-  )
-}
-
-/* ---------- Valeur avec exact sous-jacent ---------- */
-
-function ValeurKpi({ montant }: { montant: number }) {
-  const entier = Math.round(montant)
-  const exacte = Number(montant.toFixed(6))
-  const different = Math.abs(exacte - entier) > 1e-6
-  return (
-    <>
-      <div className="carte-stat-valeur">{fmt0(entier)}</div>
-      {different && <div className="carte-stat-valeur-exacte">{fmt6(exacte)}</div>}
-    </>
+    fmtNombre(n) + ' u'
   )
 }
 
@@ -75,18 +57,71 @@ export function TableauBordPage() {
   const { data, loading, erreur } = useTableauBord()
   const navigate = useNavigate()
   const [page, setPage] = useState(1)
+  const [periodeIdSelectionnee, setPeriodeIdSelectionnee] = useState<string | null>(null)
+  const periodeSelectionnee = data?.periodes.find((p) => p.id === periodeIdSelectionnee) ?? data?.periodes[0] ?? null
+  const { detail: detailDerniere, loading: chargementDetail, erreur: erreurDetail } =
+    useDetailPeriode(periodeSelectionnee?.id)
 
   if (loading) return <LoadingState />
   if (erreur) return <p className="texte-erreur">Erreur : {erreur}</p>
   if (!data) return <p className="texte-secondaire">Aucune donnée.</p>
 
-  const d = data.dernierePeriode
+  const d = periodeSelectionnee
+  const anneesDisponibles = [...new Set(data.periodes.map((p) => p.annee))].sort((a, b) => b - a)
+  const anneeSelectionnee = d?.annee ?? anneesDisponibles[0] ?? new Date().getFullYear()
+  const periodesAnneeSelectionnee = data.periodes.filter((p) => p.annee === anneeSelectionnee)
+  const pointsGraphique = d
+    ? data.periodes
+        .filter((p) => p.annee < d.annee || (p.annee === d.annee && p.mois <= d.mois))
+        .slice(0, 6)
+        .reverse()
+        .map((p) => ({ label: `${MOIS_COURTS[p.mois]} ${p.annee}`, annee: p.annee, mois: p.mois, jiro: p.montant_jiro, rano: p.montant_rano }))
+    : []
+  const moyenneJiro = pointsGraphique.length ? pointsGraphique.reduce((s, p) => s + p.jiro, 0) / pointsGraphique.length : 0
+  const moyenneRano = pointsGraphique.length ? pointsGraphique.reduce((s, p) => s + p.rano, 0) / pointsGraphique.length : 0
 
   // Pagination
   const totalPages = Math.max(1, Math.ceil(data.periodes.length / PERIODES_PAR_PAGE))
   const pageCourante = Math.min(page, totalPages)
   const debut = (pageCourante - 1) * PERIODES_PAR_PAGE
   const periodesPage = data.periodes.slice(debut, debut + PERIODES_PAR_PAGE)
+  const dernierePeriodeCarte = d ? (
+    <Card className="carte-sans-padding dashboard-dernier">
+      <CardEntete
+        titre={`Ventilation — ${MOIS_LONGS[d.mois]} ${d.annee}`}
+        sousTitre={`Répartition pour ${d.nb_personnes} personne${d.nb_personnes > 1 ? 's' : ''}`}
+        actions={<>
+          {d.certifiee ? <Badge variante="succes">✓ Répartition vérifiée</Badge> : <Badge variante="erreur">Non certifiée</Badge>}
+          <Link to={`/admin/periodes/${d.id}`} className="btn btn-sm">Voir le détail</Link>
+        </>}
+      />
+      {chargementDetail && <LoadingState texte="Chargement de la ventilation…" />}
+      {erreurDetail && <Message variante="erreur">Erreur : {erreurDetail}</Message>}
+      {detailDerniere?.id === d.id && <Table
+        libelle={`Ventilation individuelle — ${MOIS_LONGS[d.mois]} ${d.annee}`}
+        lignes={detailDerniere.lignes}
+        cleLigne={(l) => l.personne_id}
+        colonnes={[
+          { cle: 'personne', titre: 'Personne / logement', afficher: (l) => <div className="col-nom">{l.personne}<div className="col-secondaire">{l.logement}</div></div> },
+          { cle: 'index_ref', titre: 'Index réf. (kWh)', alignement: 'droite', afficher: (l) => fmtNombre(l.index_total - l.consommation) },
+          { cle: 'index_fin', titre: 'Index fin (kWh)', alignement: 'droite', afficher: (l) => fmtNombre(l.index_total) },
+          { cle: 'consommation', titre: 'Conso calculée (kWh)', alignement: 'droite', classe: 'dashboard-col-jiro', afficher: (l) => fmtNombre(l.consommation) },
+          { cle: 'part_jiro', titre: 'Part Jiro (Ar)', alignement: 'droite', classe: 'dashboard-col-jiro', afficher: (l) => fmtNombre(l.part_jiro) },
+          { cle: 'quantite_rano', titre: 'Qté Rano (unités)', alignement: 'droite', classe: 'dashboard-col-rano', afficher: (l) => fmtUnites(l.quantite_rano) },
+          { cle: 'part_rano', titre: 'Part Rano (Ar)', alignement: 'droite', classe: 'dashboard-col-rano', afficher: (l) => fmtNombre(l.part_rano) },
+          { cle: 'total', titre: 'Total individuel (Ar)', alignement: 'droite', afficher: (l) => <strong>{fmtNombre(l.part_jiro + l.part_rano)}</strong> },
+        ]}
+        pied={<tr>
+          <td colSpan={3}><strong>Total consolidé</strong></td>
+          <td className="col-droite">{fmtKwh(detailDerniere.lignes.reduce((s, l) => s + l.consommation, 0))}</td>
+          <td className="col-droite">{fmt6(detailDerniere.lignes.reduce((s, l) => s + l.part_jiro, 0))}</td>
+          <td className="col-droite">{fmtUnites(detailDerniere.lignes.reduce((s, l) => s + l.quantite_rano, 0))}</td>
+          <td className="col-droite">{fmt6(detailDerniere.lignes.reduce((s, l) => s + l.part_rano, 0))}</td>
+          <td className="col-droite"><strong>{fmt6(d.montant_jiro + d.montant_rano)}</strong></td>
+        </tr>}
+      />}
+    </Card>
+  ) : null
 
   return (
     <div className="page">
@@ -94,29 +129,53 @@ export function TableauBordPage() {
         surtitre="GESTION DES CONSOMMATIONS"
         titre="Tableau de bord"
         sousTitre="Vue d'ensemble des factures, consommations et répartitions."
+        actions={<div className="dashboard-periode-selecteurs" aria-label="Filtrer le tableau de bord par période">
+          <label>Mois<select
+            value={d ? String(d.mois) : ''}
+            onChange={(e) => {
+              const periode = periodesAnneeSelectionnee.find((p) => p.mois === Number(e.target.value))
+              setPeriodeIdSelectionnee(periode?.id ?? null)
+            }}
+            disabled={periodesAnneeSelectionnee.length === 0}
+          >
+            {periodesAnneeSelectionnee.map((p) => <option key={p.id} value={p.mois}>{MOIS_LONGS[p.mois]}</option>)}
+          </select></label>
+          <label>Année<select
+            value={String(anneeSelectionnee)}
+            onChange={(e) => {
+              const periode = data.periodes.find((p) => p.annee === Number(e.target.value))
+              setPeriodeIdSelectionnee(periode?.id ?? null)
+            }}
+            disabled={anneesDisponibles.length === 0}
+          >
+            {anneesDisponibles.map((annee) => <option key={annee} value={annee}>{annee}</option>)}
+            {anneesDisponibles.length === 0 && <option value={anneeSelectionnee}>{anneeSelectionnee}</option>}
+          </select></label>
+          {d && <div className="dashboard-periode-identifiant"><span>Période sélectionnée</span><strong>{d.annee}-{String(d.mois).padStart(2, '0')}</strong></div>}
+        </div>}
       />
 
       {/* KPI en haut : 3 cartes */}
-      <section className="grille-3">
+      <section className="grille-3 dashboard-indicateurs">
         <CardStat
           label="Facture Jiro (Électricité)"
-          valeur={<ValeurKpi montant={data.totalJiro} />}
-          detail="Total cumulé"
-          icone="⚡"
+          valeur={fmt6(d?.montant_jiro ?? 0)}
+          detail={d ? `${MOIS_LONGS[d.mois]} ${d.annee}` : 'Aucune période enregistrée'}
+          icone={<Icone nom="electricite" />}
           variante="jiro"
         />
         <CardStat
           label="Facture Rano (Eau)"
-          valeur={<ValeurKpi montant={data.totalRano} />}
-          detail="Total cumulé"
-          icone="💧"
+          valeur={fmt6(d?.montant_rano ?? 0)}
+          detail={d ? `${MOIS_LONGS[d.mois]} ${d.annee}` : 'Aucune période enregistrée'}
+          icone={<Icone nom="eau" />}
           variante="rano"
         />
         <CardStat
           label="Personnes actives"
-          valeur={data.nbPersonnesActives}
-          detail={`${data.nbLogements} logement${data.nbLogements > 1 ? 's' : ''} • ${data.nbPeriodes} période${data.nbPeriodes > 1 ? 's' : ''}`}
-          icone="👥"
+          valeur={d?.nb_personnes ?? 0}
+          detail={d ? `Personnes relevées en ${MOIS_LONGS[d.mois]} ${d.annee}` : 'Aucune période enregistrée'}
+          icone={<Icone nom="personnes" />}
           variante="sombre"
         />
       </section>
@@ -126,26 +185,18 @@ export function TableauBordPage() {
         <Card>
           <CardEntete
             titre="Évolution mensuelle des factures"
-            sousTitre="Comparatif Jiro et Rano sur les 6 dernières périodes"
+            sousTitre={d ? `Comparatif des périodes jusqu’à ${MOIS_LONGS[d.mois]} ${d.annee}` : 'Comparatif des factures Jiro et Rano'}
           />
           <GraphiqueFactures
-            points={data.pointsGraphique}
+            points={pointsGraphique}
             onClicPeriode={(annee, mois) => {
               const p = data.periodes.find((x) => x.annee === annee && x.mois === mois)
               if (p) navigate(`/admin/periodes/${p.id}`)
             }}
           />
-          <div className="grille-2 mt-4">
-            <CardStat
-              label="Moyenne Jiro (6 mois)"
-              valeur={fmt0(data.moyenneJiro6m)}
-              variante="jiro"
-            />
-            <CardStat
-              label="Moyenne Rano (6 mois)"
-              valeur={fmt0(data.moyenneRano6m)}
-              variante="rano"
-            />
+          <div className="dashboard-moyennes">
+            <div><span>Moyenne Jiro ({pointsGraphique.length} périodes)</span><strong>{fmt6(moyenneJiro)}</strong></div>
+            <div><span>Moyenne Rano ({pointsGraphique.length} périodes)</span><strong>{fmt6(moyenneRano)}</strong></div>
           </div>
         </Card>
 
@@ -154,19 +205,19 @@ export function TableauBordPage() {
           <div className="empilement-serre">
             <RaccourciLien
               to="/admin/periodes"
-              icone="📝"
+              icone={<Icone nom="saisie" />}
               titre="Nouvelle saisie de période"
               sousTitre="Enregistrer les factures et index"
             />
             <RaccourciLien
               to="/admin/personnes"
-              icone="👥"
+              icone={<Icone nom="personnes" />}
               titre="Gestion des personnes"
               sousTitre="Gérer les personnes et les comptes"
             />
             <RaccourciLien
               to="/admin/historique"
-              icone="📤"
+              icone={<Icone nom="export" />}
               titre="Historique & Export"
               sousTitre="Consulter et exporter les périodes"
             />
@@ -174,72 +225,16 @@ export function TableauBordPage() {
         </Card>
       </section>
 
-      {/* Dernière période */}
-      {d && (
-        <Card>
-          <CardEntete
-            titre={`Dernière période — ${MOIS_LONGS[d.mois]} ${d.annee}`}
-            sousTitre={`${d.nb_personnes} personne${d.nb_personnes > 1 ? 's' : ''} concernée${d.nb_personnes > 1 ? 's' : ''}`}
-            actions={
-              <>
-                {d.certifiee ? (
-                  <Badge variante="succes">✓ Vérifiée</Badge>
-                ) : (
-                  <Badge variante="erreur">Non certifiée</Badge>
-                )}
-                <Link to={`/admin/periodes/${d.id}`} className="btn">
-                  Voir le détail
-                </Link>
-              </>
-            }
-          />
-          <div className="grille-3">
-            <div>
-              <div className="texte-majuscules texte-secondaire">Facture Jiro</div>
-              <div className="texte-gras" style={{ fontSize: 18 }}>
-                {fmt0(d.montant_jiro)}
-              </div>
-              <div className="texte-petit texte-secondaire">
-                {fmtKwh(d.conso_jiro)} consommés
-              </div>
-              <div className="texte-petit texte-secondaire">
-                CU : {d.cout_unitaire_jiro ? fmt6(d.cout_unitaire_jiro) + ' /kWh' : '—'}
-              </div>
-            </div>
-            <div>
-              <div className="texte-majuscules texte-secondaire">Facture Rano</div>
-              <div className="texte-gras" style={{ fontSize: 18 }}>
-                {fmt0(d.montant_rano)}
-              </div>
-              <div className="texte-petit texte-secondaire">
-                {fmtUnites(d.quantite_rano)} réparties
-              </div>
-              <div className="texte-petit texte-secondaire">
-                CU : {d.cout_unitaire_rano ? fmt6(d.cout_unitaire_rano) + ' /u' : '—'}
-              </div>
-            </div>
-            <div>
-              <div className="texte-majuscules texte-secondaire">Total consolidé</div>
-              <div className="texte-gras" style={{ fontSize: 18 }}>
-                {fmt0(d.montant_jiro + d.montant_rano)}
-              </div>
-              <div className="texte-petit texte-secondaire">
-                {d.nb_personnes} personne{d.nb_personnes > 1 ? 's' : ''}
-              </div>
-            </div>
-          </div>
-        </Card>
-      )}
-
       {/* Liste des périodes */}
-      <Card>
+      <Card className="carte-sans-padding dashboard-periodes">
         <CardEntete
-          titre="Périodes enregistrées"
-          sousTitre={`${data.periodes.length} période${data.periodes.length > 1 ? 's' : ''} au total`}
+          titre="Périodes enregistrées récentes"
+          sousTitre="Consommations globales et état des répartitions."
+          actions={<Badge variante="info">{data.periodes.length} période{data.periodes.length > 1 ? 's' : ''} répertoriée{data.periodes.length > 1 ? 's' : ''}</Badge>}
         />
         {data.periodes.length === 0 ? (
           <EmptyState
-            icone="📭"
+            icone={<Icone nom="vide" />}
             titre="Aucune période"
             texte="Commencez par saisir une période de répartition."
             action={
@@ -256,11 +251,12 @@ export function TableauBordPage() {
                   <tr>
                     <th>Période</th>
                     <th className="col-droite">Facture Jiro</th>
+                    <th className="col-droite">Conso. Jiro</th>
                     <th className="col-droite">Facture Rano</th>
-                    <th className="col-droite">Total</th>
+                    <th className="col-droite">Qté Rano</th>
                     <th className="col-centre">Personnes</th>
                     <th className="col-centre">État</th>
-                    <th></th>
+                    <th className="col-droite">Action</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -275,10 +271,9 @@ export function TableauBordPage() {
                         </div>
                       </td>
                       <td className="col-droite col-num">{fmt6(p.montant_jiro)}</td>
+                      <td className="col-droite col-num">{fmtKwh(p.conso_jiro)}</td>
                       <td className="col-droite col-num">{fmt6(p.montant_rano)}</td>
-                      <td className="col-droite col-num col-nom">
-                        {fmt6(p.montant_jiro + p.montant_rano)}
-                      </td>
+                      <td className="col-droite col-num">{fmtUnites(p.quantite_rano)}</td>
                       <td className="col-centre">{p.nb_personnes}</td>
                       <td className="col-centre">
                         {p.certifiee ? (
@@ -289,7 +284,7 @@ export function TableauBordPage() {
                       </td>
                       <td className="col-droite">
                         <Link to={`/admin/periodes/${p.id}`} className="btn btn-sm">
-                          Détail →
+                          Voir détail
                         </Link>
                       </td>
                     </tr>
@@ -326,6 +321,23 @@ export function TableauBordPage() {
           </>
         )}
       </Card>
+      {dernierePeriodeCarte}
+      <section className="dashboard-regles" aria-label="Règles de répartition et contrôles">
+        <Card className="dashboard-regle dashboard-regle-zero">
+          <div className="dashboard-regle-icone"><Icone nom="info" /></div>
+          <div>
+            <h3>Règle de répartition à valeur nulle</h3>
+            <p>Si une personne a une consommation Jiro nulle ou une quantité Rano nulle, sa part pour ce service est fixée à 0,000000 Ar et un avertissement s’affiche. La répartition reste possible tant que le total des consommations Jiro et le total des quantités Rano sont chacun supérieurs à zéro.</p>
+          </div>
+        </Card>
+        <Card className="dashboard-regle dashboard-regle-controle">
+          <div className="dashboard-regle-icone"><Icone nom="balance" /></div>
+          <div>
+            <h3>Contrôle arithmétique bloquant</h3>
+            <p>Le calcul est bloqué si un montant de facture est nul ou négatif, si une valeur saisie est invalide, ou si le total des unités d’un service est nul. La certification exige que les parts Jiro et Rano correspondent chacune à leur facture avec un écart strictement inférieur à 0,000001 Ar. Les exports restent bloqués tant que la période n’est pas certifiée.</p>
+          </div>
+        </Card>
+      </section>
     </div>
   )
 }
@@ -339,52 +351,25 @@ function RaccourciLien({
   sousTitre,
 }: {
   to: string
-  icone: string
+  icone: ReactNode
   titre: string
   sousTitre: string
 }) {
   return (
     <Link
       to={to}
-      style={{
-        display: 'flex',
-        alignItems: 'center',
-        gap: 'var(--e-3)',
-        padding: 'var(--e-3)',
-        border: '1px solid var(--c-bordure)',
-        borderRadius: 'var(--r-md)',
-        textDecoration: 'none',
-        color: 'inherit',
-        transition: 'background 0.15s',
-      }}
-      onMouseEnter={(e) => {
-        e.currentTarget.style.background = '#f8fafc'
-      }}
-      onMouseLeave={(e) => {
-        e.currentTarget.style.background = 'transparent'
-      }}
+      className="raccourci-lien"
     >
-      <div
-        style={{
-          width: 36,
-          height: 36,
-          borderRadius: 'var(--r-sm)',
-          background: 'var(--c-bordure-douce)',
-          display: 'grid',
-          placeItems: 'center',
-          fontSize: 18,
-          flexShrink: 0,
-        }}
-      >
+      <div className="raccourci-icone">
         {icone}
       </div>
-      <div style={{ flex: 1, minWidth: 0 }}>
-        <div className="texte-demi-gras" style={{ fontSize: 13 }}>
+      <div className="raccourci-texte">
+        <div className="texte-demi-gras">
           {titre}
         </div>
         <div className="texte-secondaire texte-petit">{sousTitre}</div>
       </div>
-      <div className="texte-tertiaire">→</div>
+      <div className="raccourci-fleche" aria-hidden="true">›</div>
     </Link>
   )
 }

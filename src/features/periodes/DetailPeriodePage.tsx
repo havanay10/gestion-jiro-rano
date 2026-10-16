@@ -2,6 +2,7 @@ import { Link, useParams } from 'react-router-dom'
 import { useDetailPeriode } from './useDetailPeriode'
 import { exporterPeriodePdf } from './exportPdf'
 import { TOLERANCE_EQUILIBRE } from '../../lib/constantes';
+import { PageHeader, CardStat, Badge, Button, Table, Message, LoadingState, EmptyState } from '../../components/ui'
 
 const moisFrancais = [
   '', 'Janvier', 'Février', 'Mars', 'Avril', 'Mai', 'Juin',
@@ -10,7 +11,7 @@ const moisFrancais = [
 
 function fmt(n: number, dec = 6): string {
   return new Intl.NumberFormat('fr-FR', {
-    minimumFractionDigits: 0,
+    minimumFractionDigits: dec,
     maximumFractionDigits: dec,
   }).format(n)
 }
@@ -19,9 +20,9 @@ export function DetailPeriodePage() {
   const { periodeId } = useParams<{ periodeId: string }>()
   const { detail, loading, erreur } = useDetailPeriode(periodeId)
 
-  if (loading) return <p>Chargement…</p>
-  if (erreur) return <p style={{ color: 'crimson' }}>Erreur : {erreur}</p>
-  if (!detail) return <p>Période introuvable.</p>
+  if (loading) return <LoadingState />
+  if (erreur) return <Message variante="erreur" titre="Chargement impossible">{erreur}</Message>
+  if (!detail) return <EmptyState titre="Période introuvable" texte="Cette période n’existe pas ou n’est plus accessible." />
 
   const totalJiro = detail.montant_jiro
   const totalRano = detail.montant_rano
@@ -36,103 +37,42 @@ export function DetailPeriodePage() {
     Math.abs(ecartRano) < TOLERANCE_EQUILIBRE
 
   return (
-    <div style={{ display: 'grid', gap: 24 }}>
-      <header style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
-        <div>
-          <Link to="/admin/historique" style={{ fontSize: 13, color: '#666', textDecoration: 'none' }}>
-            ← Retour à l’historique
-          </Link>
-          <h2 style={{ margin: '8px 0 0 0' }}>
-            Détail — {moisFrancais[detail.mois]} {detail.annee}
-          </h2>
-        </div>
-        <button type="button" onClick={() => exporterPeriodePdf(detail)}>
-          Exporter en PDF
-        </button>
-      </header>
+    <div className="page">
+      <PageHeader
+        surtitre={`RÉFÉRENCE ${detail.annee}-${String(detail.mois).padStart(2, '0')}-${detail.id.replaceAll('-', '').slice(0, 8).toUpperCase()}`}
+        titre={`Détail — ${moisFrancais[detail.mois]} ${detail.annee}`}
+        sousTitre={<Link to="/admin/historique">← Retour à l’historique</Link>}
+        actions={<Button type="button" variante="primaire" onClick={() => exporterPeriodePdf(detail)} disabled={!equilibre} title={!equilibre ? 'Export bloqué : période non certifiée.' : undefined}>Exporter en PDF</Button>}
+      />
 
-      {/* Récapitulatif */}
-      <section style={{ border: '1px solid #ddd', borderRadius: 8, padding: 16 }}>
-        <h3 style={{ marginTop: 0 }}>Récapitulatif</h3>
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 16 }}>
-          <div>
-            <div style={{ fontSize: 12, color: '#888' }}>Facture Jiro</div>
-            <div style={{ fontWeight: 600 }}>{fmt(totalJiro)} Ar</div>
-          </div>
-          <div>
-            <div style={{ fontSize: 12, color: '#888' }}>Coût unitaire Jiro</div>
-            <div style={{ fontWeight: 600 }}>{fmt(detail.cout_unitaire_jiro ?? 0)} Ar/kWh</div>
-          </div>
-          <div>
-            <div style={{ fontSize: 12, color: '#888' }}>Facture Rano</div>
-            <div style={{ fontWeight: 600 }}>{fmt(totalRano)} Ar</div>
-          </div>
-          <div>
-            <div style={{ fontSize: 12, color: '#888' }}>Coût unitaire Rano</div>
-            <div style={{ fontWeight: 600 }}>{fmt(detail.cout_unitaire_rano ?? 0)} Ar/unité</div>
-          </div>
-        </div>
+      <Message variante={equilibre ? 'succes' : 'erreur'} titre={equilibre ? 'Période certifiée' : 'Période non certifiée'}>
+        {equilibre ? 'Les parts Jiro et Rano correspondent aux factures.' : `Écart détecté — Jiro : ${fmt(ecartJiro)} Ar, Rano : ${fmt(ecartRano)} Ar. Les exports sont bloqués.`}
+      </Message>
 
-        <div style={{ marginTop: 16, fontSize: 14 }}>
-          <strong>Total consolidé :</strong> {fmt(totalJiro + totalRano)} Ar
-        </div>
-
-        <div style={{ marginTop: 12 }}>
-          {equilibre ? (
-            <span style={{ color: 'green', fontWeight: 600 }}>
-              ✓ Répartition exacte : la somme des parts égale les factures.
-            </span>
-          ) : (
-            <span style={{ color: 'crimson', fontWeight: 600 }}>
-              ✗ Écart détecté — Jiro : {fmt(ecartJiro)} Ar, Rano : {fmt(ecartRano)} Ar
-            </span>
-          )}
-        </div>
+      <section className="grille-3">
+        <CardStat variante="jiro" label="Facture Jiro" valeur={<>{fmt(totalJiro)} <small>Ar</small></>} detail={`Coût unitaire : ${fmt(detail.cout_unitaire_jiro ?? 0)} Ar/kWh`} />
+        <CardStat variante="rano" label="Facture Rano" valeur={<>{fmt(totalRano)} <small>Ar</small></>} detail={`Coût unitaire : ${fmt(detail.cout_unitaire_rano ?? 0)} Ar/unité`} />
+        <CardStat variante="sombre" label="Total consolidé" valeur={<>{fmt(totalJiro + totalRano)} <small>Ar</small></>} detail={<Badge variante={equilibre ? 'succes' : 'erreur'}>{equilibre ? 'Répartition vérifiée' : 'Écart à corriger'}</Badge>} />
       </section>
 
-      {/* Tableau */}
-      <section style={{ border: '1px solid #ddd', borderRadius: 8, padding: 16 }}>
-        <h3 style={{ marginTop: 0 }}>Ventilation individuelle</h3>
-        <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 14 }}>
-          <thead>
-            <tr style={{ textAlign: 'left', borderBottom: '1px solid #ddd' }}>
-              <th style={{ padding: 8 }}>Personne</th>
-              <th style={{ padding: 8 }}>Logement</th>
-              <th style={{ padding: 8, textAlign: 'right' }}>Index</th>
-              <th style={{ padding: 8, textAlign: 'right' }}>Conso (kWh)</th>
-              <th style={{ padding: 8, textAlign: 'right' }}>Qté Rano (u)</th>
-              <th style={{ padding: 8, textAlign: 'right' }}>Part Jiro (Ar)</th>
-              <th style={{ padding: 8, textAlign: 'right' }}>Part Rano (Ar)</th>
-              <th style={{ padding: 8, textAlign: 'right' }}>Total (Ar)</th>
-            </tr>
-          </thead>
-          <tbody>
-            {detail.lignes.map((l) => (
-              <tr key={l.personne_id} style={{ borderBottom: '1px solid #f0f0f0' }}>
-                <td style={{ padding: 8, fontWeight: 600 }}>{l.personne}</td>
-                <td style={{ padding: 8 }}>{l.logement}</td>
-                <td style={{ padding: 8, textAlign: 'right' }}>{fmt(l.index_total)}</td>
-                <td style={{ padding: 8, textAlign: 'right' }}>{fmt(l.consommation)}</td>
-                <td style={{ padding: 8, textAlign: 'right' }}>{l.quantite_rano}</td>
-                <td style={{ padding: 8, textAlign: 'right' }}>{fmt(l.part_jiro)}</td>
-                <td style={{ padding: 8, textAlign: 'right' }}>{fmt(l.part_rano)}</td>
-                <td style={{ padding: 8, textAlign: 'right', fontWeight: 600 }}>
-                  {fmt(l.part_jiro + l.part_rano)}
-                </td>
-              </tr>
-            ))}
-          </tbody>
-          <tfoot>
-            <tr style={{ borderTop: '2px solid #333', fontWeight: 700 }}>
-              <td style={{ padding: 8 }} colSpan={3}>Totaux</td>
-              <td style={{ padding: 8, textAlign: 'right' }}>{fmt(totalConso)}</td>
-              <td style={{ padding: 8, textAlign: 'right' }}>{totalRanoQte}</td>
-              <td style={{ padding: 8, textAlign: 'right' }}>{fmt(totalPartJiro)}</td>
-              <td style={{ padding: 8, textAlign: 'right' }}>{fmt(totalPartRano)}</td>
-              <td style={{ padding: 8, textAlign: 'right' }}>{fmt(totalPartJiro + totalPartRano)}</td>
-            </tr>
-          </tfoot>
-        </table>
+      <section className="carte carte-sans-padding">
+        <div className="carte-entete detail-tableau-entete"><div><div className="carte-titre">Ventilation individuelle</div><div className="carte-sous-titre">Parts calculées pour chaque personne de la période.</div></div></div>
+        <Table
+          libelle="Ventilation individuelle de la période"
+          lignes={detail.lignes}
+          cleLigne={(l) => l.personne_id}
+          colonnes={[
+            { cle: 'personne', titre: 'Personne', afficher: (l) => <strong>{l.personne}</strong> },
+            { cle: 'logement', titre: 'Logement', afficher: (l) => l.logement },
+            { cle: 'index', titre: 'Index', alignement: 'droite', afficher: (l) => fmt(l.index_total) },
+            { cle: 'conso', titre: 'Conso (kWh)', alignement: 'droite', afficher: (l) => fmt(l.consommation) },
+            { cle: 'qte', titre: 'Qté Rano (u)', alignement: 'droite', afficher: (l) => l.quantite_rano },
+            { cle: 'jiro', titre: 'Part Jiro (Ar)', alignement: 'droite', afficher: (l) => fmt(l.part_jiro) },
+            { cle: 'rano', titre: 'Part Rano (Ar)', alignement: 'droite', afficher: (l) => fmt(l.part_rano) },
+            { cle: 'total', titre: 'Total (Ar)', alignement: 'droite', afficher: (l) => <strong>{fmt(l.part_jiro + l.part_rano)}</strong> },
+          ]}
+          pied={<tr><td colSpan={3}>Totaux</td><td className="col-droite">{fmt(totalConso)}</td><td className="col-droite">{totalRanoQte}</td><td className="col-droite">{fmt(totalPartJiro)}</td><td className="col-droite">{fmt(totalPartRano)}</td><td className="col-droite">{fmt(totalPartJiro + totalPartRano)}</td></tr>}
+        />
       </section>
     </div>
   )

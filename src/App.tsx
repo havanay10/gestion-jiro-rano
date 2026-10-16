@@ -11,11 +11,8 @@ import { SaisiePeriodePage } from './features/periodes/SaisiePeriodePage'
 import { HistoriquePage } from './features/historique/HistoriquePage'
 import { DetailPeriodePage } from './features/periodes/DetailPeriodePage'
 import { EspacePersonnelPage } from './features/espace-personnel/EspacePersonnelPage'
-
-// Pages admin (à créer dans les sous-étapes suivantes)
-function AdminAudit() {
-  return <h2>Journal d’audit</h2>
-}
+import { AdminAudit } from './features/historique/AdminAudit'
+import { DetailRelevePersonnelPage } from './features/espace-personnel/DetailRelevePersonnelPage'
 
 
 export default function App() {
@@ -104,6 +101,16 @@ export default function App() {
               <ProtectedRoute roleRequis="personnel">
                 <PersonnelLayout>
                   <EspacePersonnelPage />
+                </PersonnelLayout>
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/espace/periodes/:periode"
+            element={
+              <ProtectedRoute roleRequis="personnel">
+                <PersonnelLayout>
+                  <DetailRelevePersonnelPage />
                 </PersonnelLayout>
               </ProtectedRoute>
             }

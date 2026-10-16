@@ -18,6 +18,7 @@ export function Button({
   icone,
   children,
   className = '',
+  type = 'button',
   ...rest
 }: ButtonProps) {
   let classe = 'btn'
@@ -30,7 +31,7 @@ export function Button({
   if (className) classe += ' ' + className
 
   return (
-    <button className={classe} {...rest}>
+    <button className={classe} type={type} {...rest}>
       {icone}
       {children}
     </button>

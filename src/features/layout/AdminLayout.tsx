@@ -1,11 +1,15 @@
 import type { ReactNode } from 'react'
-import { NavLink, useNavigate } from 'react-router-dom'
+import { NavLink, useLocation, useNavigate } from 'react-router-dom'
 import { useAuth } from '../auth/AuthContext'
 import { Footer } from './Footer'
+import { useRef } from 'react'
+import { LogoMarque } from '../../components/ui/LogoMarque'
 
 export function AdminLayout({ children }: { children: ReactNode }) {
   const { signOut, user, profil } = useAuth()
   const navigate = useNavigate()
+  const location = useLocation()
+  const menuComplementaire = useRef<HTMLDetailsElement>(null)
 
   async function handleSignOut() {
     await signOut()
@@ -28,23 +32,23 @@ export function AdminLayout({ children }: { children: ReactNode }) {
     { to: '/admin', label: 'Tableau de bord', end: true },
     { to: '/admin/periodes', label: 'Saisie & Répartition' },
     { to: '/admin/personnes', label: 'Gestion des personnes' },
-    { to: '/admin/logements', label: 'Logements' },
     { to: '/admin/historique', label: 'Historique & Export' },
-    { to: '/admin/audit', label: "Journal d'audit" },
   ]
+  const menuComplementaireActif =
+    location.pathname === '/admin/logements' || location.pathname === '/admin/audit'
 
   return (
-    <div className="layout-app">
+    <div className="layout-app layout-app-admin">
       <header className="header-app">
         <div className="header-marque">
-          <div className="header-marque-icone">JR</div>
+          <LogoMarque />
           <div className="header-marque-texte">
             <div className="header-marque-titre">Jiro &amp; Rano</div>
             <div className="header-marque-sous-titre">Gestion &amp; Décompte</div>
           </div>
         </div>
 
-        <nav className="header-navigation">
+        <nav className="header-navigation" aria-label="Navigation principale">
           {liens.map((lien) => (
             <NavLink
               key={lien.to}
@@ -57,6 +61,19 @@ export function AdminLayout({ children }: { children: ReactNode }) {
               {lien.label}
             </NavLink>
           ))}
+          <details className="header-menu" ref={menuComplementaire}>
+            <summary className={'header-lien' + (menuComplementaireActif ? ' header-lien-actif' : '')}>
+              Administration <span aria-hidden="true">⌄</span>
+            </summary>
+            <div className="header-menu-contenu">
+              <NavLink to="/admin/logements" className="header-menu-lien" onClick={() => { if (menuComplementaire.current) menuComplementaire.current.open = false }}>
+                Logements
+              </NavLink>
+              <NavLink to="/admin/audit" className="header-menu-lien" onClick={() => { if (menuComplementaire.current) menuComplementaire.current.open = false }}>
+                Journal d’audit
+              </NavLink>
+            </div>
+          </details>
         </nav>
 
         <div className="header-utilisateur">
@@ -77,7 +94,7 @@ export function AdminLayout({ children }: { children: ReactNode }) {
         </div>
       </header>
 
-      <main className="layout-contenu">{children}</main>
+      <main className="layout-contenu layout-contenu-admin">{children}</main>
 
       <Footer />
     </div>

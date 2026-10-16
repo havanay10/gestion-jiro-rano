@@ -11,7 +11,7 @@ const moisFrancais = [
 function fmt(n: number, maxDec = 6): string {
   return new Intl.NumberFormat('fr-FR', {
     maximumFractionDigits: maxDec,
-    minimumFractionDigits: 0,
+    minimumFractionDigits: maxDec,
   })
     .format(n)
     .replace(/\u202F/g, ' ')
@@ -19,6 +19,13 @@ function fmt(n: number, maxDec = 6): string {
 }
 
 export function exporterPeriodePdf(detail: DetailPeriode) {
+  const totalPartJiroControle = detail.lignes.reduce((s, l) => s + l.part_jiro, 0)
+  const totalPartRanoControle = detail.lignes.reduce((s, l) => s + l.part_rano, 0)
+  const valide =
+    Math.abs(totalPartJiroControle - detail.montant_jiro) < TOLERANCE_EQUILIBRE &&
+    Math.abs(totalPartRanoControle - detail.montant_rano) < TOLERANCE_EQUILIBRE
+  if (!valide) throw new Error('Export bloqué : cette période n’est pas certifiée.')
+
   const doc = new jsPDF({ orientation: 'landscape', unit: 'mm', format: 'a4' })
   const largeur = doc.internal.pageSize.getWidth()
   const dateGeneration = new Date().toLocaleString('fr-FR')
@@ -42,6 +49,9 @@ export function exporterPeriodePdf(detail: DetailPeriode) {
   doc.text(`Facture Rano : ${fmt(montantRano)} Ar`, 14, 40)
   doc.text(`Coût unitaire Rano : ${fmt(cuRano)} Ar/unité`, 14, 46)
   doc.text(`Total consolidé : ${fmt(totalGeneral)} Ar`, 14, 52)
+  doc.setTextColor(22, 130, 60)
+  doc.text('Période certifiée', largeur - 14, 28, { align: 'right' })
+  doc.setTextColor(0, 0, 0)
 
   const head = [[
     'Personne', 'Logement', 'Index', 'Conso (kWh)',
@@ -92,7 +102,7 @@ export function exporterPeriodePdf(detail: DetailPeriode) {
     },
   })
 
-  // @ts-ignore — lastAutoTable est ajouté par jspdf-autotable
+  // @ts-expect-error jspdf-autotable ajoute cette propriété à l’exécution.
   const finTableau = doc.lastAutoTable?.finalY ?? 120
   const ecartJiro = totalPartJiro - montantJiro
   const ecartRano = totalPartRano - montantRano

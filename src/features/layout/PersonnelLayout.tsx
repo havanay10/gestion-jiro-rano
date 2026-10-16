@@ -2,6 +2,8 @@ import type { ReactNode } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useAuth } from '../auth/AuthContext'
 import { Footer } from './Footer'
+import { NavLink } from 'react-router-dom'
+import { LogoMarque } from '../../components/ui/LogoMarque'
 
 export function PersonnelLayout({ children }: { children: ReactNode }) {
   const { signOut, user, profil } = useAuth()
@@ -25,19 +27,21 @@ export function PersonnelLayout({ children }: { children: ReactNode }) {
     profil?.role === 'personnel' ? 'Espace personnel' : 'Utilisateur'
 
   return (
-    <div className="layout-app">
+    <div className="layout-app layout-app-personnel">
       <header className="header-app">
         <div className="header-marque">
-          <div className="header-marque-icone">JR</div>
+          <LogoMarque />
           <div className="header-marque-texte">
             <div className="header-marque-titre">Jiro &amp; Rano</div>
             <div className="header-marque-sous-titre">Gestion &amp; Décompte</div>
           </div>
         </div>
 
-        <div className="header-navigation">
-          <span className="header-lien header-lien-actif">Mon espace</span>
-        </div>
+        <nav className="header-navigation header-navigation-personnel" aria-label="Navigation personnelle">
+          <NavLink to="/espace" className={({ isActive }) => 'header-lien' + (isActive ? ' header-lien-actif' : '')}>
+            Mon espace
+          </NavLink>
+        </nav>
 
         <div className="header-utilisateur">
           <div className="avatar">{initiales}</div>
@@ -57,7 +61,7 @@ export function PersonnelLayout({ children }: { children: ReactNode }) {
         </div>
       </header>
 
-      <main className="layout-contenu">{children}</main>
+      <main className="layout-contenu layout-contenu-personnel">{children}</main>
 
       <Footer />
     </div>

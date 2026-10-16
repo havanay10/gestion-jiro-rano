@@ -5,6 +5,10 @@ import { personneSchema } from './schema'
 import type { PersonneFormValues } from './schema'
 import { usePersonnes } from './usePersonnes'
 import { supabase } from '../../lib/supabase'
+import { Drawer } from '../../components/ui/Drawer'
+import { PageHeader } from '../../components/ui/PageHeader'
+import { Button } from '../../components/ui/Button'
+import { Badge, EmptyState, LoadingState, Message } from '../../components/ui'
 
 type LogementOption = { id: string; nom_code: string }
 
@@ -21,6 +25,7 @@ export function PersonnesPage() {
   const [logementsDispo, setLogementsDispo] = useState<LogementOption[]>([])
   const [messageSucces, setMessageSucces] = useState('')
   const [messageErreur, setMessageErreur] = useState('')
+  const [creationOuverte, setCreationOuverte] = useState(false)
 
   // Création de compte
   const [compteEnCours, setCompteEnCours] = useState<string | null>(null)
@@ -106,6 +111,7 @@ export function PersonnesPage() {
         logement_id: values.logement_id ?? null,
       })
       setMessageSucces(`Personne « ${values.nom} » créée.`)
+      setCreationOuverte(false)
       reset({
         nom: '',
         periode_depart_annee: String(new Date().getFullYear()),
@@ -203,24 +209,29 @@ export function PersonnesPage() {
   }
 
   return (
-    <div style={{ display: 'grid', gap: 24 }}>
-      <header>
-        <h2>Gestion des personnes</h2>
-        <p style={{ color: '#666' }}>
-          Créez une personne avec son index initial et son logement. Les personnes
-          existantes peuvent être activées, désactivées, ou recevoir un compte.
-        </p>
-      </header>
+    <div className="page">
+      <PageHeader
+        surtitre="GESTION DES OCCUPANTS ET SOUS-COMPTES"
+        titre="Gestion des personnes & sous-comptes"
+        sousTitre="Gérez les occupants, leurs compteurs, logements et accès à l’espace personnel."
+        actions={<div className="personnes-entete-actions">
+          <span className="badge badge-info">{personnes.filter((p) => p.statut_actif).length} personnes actives</span>
+          <Button variante="primaire" onClick={() => setCreationOuverte(true)}>Ajouter une personne</Button>
+        </div>}
+      />
+      <details className="notice-pedagogique">
+        <summary>Règle d’index initial et période de départ</summary>
+        <p>Le nouvel index initial devient le relevé de référence. La période de départ ne compte pas de consommation pour cette personne.</p>
+        <span className="badge badge-info">Période active : {String(new Date().getMonth() + 1).padStart(2, '0')}/{new Date().getFullYear()}</span>
+      </details>
 
       {/* Formulaire de création */}
-      <section style={{ border: '1px solid #ddd', borderRadius: 8, padding: 16 }}>
-        <h3>Nouvelle personne</h3>
-
-        <form onSubmit={handleSubmit(onSubmit)} style={{ display: 'grid', gap: 12 }}>
+      <Drawer ouvert={creationOuverte} titre="Nouvelle personne" sousTitre="Enregistrez les informations de départ et le logement." onFermer={() => setCreationOuverte(false)}>
+        <form onSubmit={handleSubmit(onSubmit)} className="personnes-formulaire">
           <label>
             Nom *
             <input type="text" {...register('nom')} />
-            {errors.nom && <span style={{ color: 'crimson' }}>{errors.nom.message}</span>}
+            {errors.nom && <span className="texte-erreur">{errors.nom.message}</span>}
           </label>
 
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
@@ -233,7 +244,7 @@ export function PersonnesPage() {
                 {...register('periode_depart_annee')}
               />
               {errors.periode_depart_annee && (
-                <span style={{ color: 'crimson' }}>{errors.periode_depart_annee.message}</span>
+                <span className="texte-erreur">{errors.periode_depart_annee.message}</span>
               )}
             </label>
             <label>
@@ -245,7 +256,7 @@ export function PersonnesPage() {
                 {...register('periode_depart_mois')}
               />
               {errors.periode_depart_mois && (
-                <span style={{ color: 'crimson' }}>{errors.periode_depart_mois.message}</span>
+                <span className="texte-erreur">{errors.periode_depart_mois.message}</span>
               )}
             </label>
           </div>
@@ -255,11 +266,11 @@ export function PersonnesPage() {
             <input
               type="text"
               inputMode="decimal"
-              placeholder="1000"
+              placeholder="Ex. 1234.567890"
               {...register('index_initial')}
             />
             {errors.index_initial && (
-              <span style={{ color: 'crimson' }}>{errors.index_initial.message}</span>
+              <span className="texte-erreur">{errors.index_initial.message}</span>
             )}
           </label>
 
@@ -274,7 +285,7 @@ export function PersonnesPage() {
               ))}
             </select>
             {logementsDispo.length === 0 && (
-              <span style={{ fontSize: 12, color: '#888' }}>
+              <span className="texte-tertiaire texte-petit">
                 Tous les logements sont actuellement occupés par une personne active.
               </span>
             )}
@@ -286,77 +297,64 @@ export function PersonnesPage() {
             </button>
           </div>
 
-          {messageSucces && <p style={{ color: 'green' }}>{messageSucces}</p>}
-          {messageErreur && <p style={{ color: 'crimson' }}>{messageErreur}</p>}
+          {messageSucces && <Message variante="succes">{messageSucces}</Message>}
+          {messageErreur && <Message variante="erreur">{messageErreur}</Message>}
         </form>
-      </section>
+      </Drawer>
 
       {/* Liste */}
-      <section>
-        <h3>Personnes existantes ({personnes.length})</h3>
+      <section className="carte carte-sans-padding personnes-liste">
+        <div className="carte-entete personnes-liste-entete">
+          <div className="carte-titre">Personnes existantes ({personnes.length})</div>
+        </div>
 
-        {erreurEmails && (
-          <div
-            style={{
-              border: '1px solid #f59e0b',
-              background: '#fef3c7',
-              color: '#92400e',
-              padding: 12,
-              borderRadius: 6,
-              marginBottom: 12,
-              fontSize: 13,
-            }}
-          >
-            ⚠ Impossible de charger l’état des comptes : {erreurEmails}. Le bouton
-            « Créer un compte » est désactivé pour éviter les doublons.
-          </div>
-        )}
+        {erreurEmails && <Message variante="avertissement" titre="État des comptes indisponible">Impossible de charger l’état des comptes : {erreurEmails}. Le bouton « Créer un compte » est désactivé pour éviter les doublons.</Message>}
 
-        {loading && <p>Chargement…</p>}
-        {erreur && <p style={{ color: 'crimson' }}>Erreur : {erreur}</p>}
-        {!loading && personnes.length === 0 && <p>Aucune personne enregistrée.</p>}
+        {loading && <LoadingState texte="Chargement des personnes…" />}
+        {erreur && <Message variante="erreur">Erreur : {erreur}</Message>}
+        {!loading && !erreur && personnes.length === 0 && <EmptyState titre="Aucune personne enregistrée" texte="Ajoutez une personne pour commencer la gestion des sous-comptes." />}
 
         {personnes.length > 0 && (
-          <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 14 }}>
+          <div className="tableau-conteneur"><table className="tableau">
             <thead>
-              <tr style={{ textAlign: 'left', borderBottom: '1px solid #ddd' }}>
-                <th style={{ padding: 8 }}>Nom</th>
-                <th style={{ padding: 8 }}>Logement</th>
-                <th style={{ padding: 8 }}>Période de départ</th>
-                <th style={{ padding: 8 }}>Dernier index</th>
-                <th style={{ padding: 8 }}>Statut</th>
-                <th style={{ padding: 8 }}>Compte</th>
-                <th style={{ padding: 8 }}>Action</th>
+              <tr>
+                <th scope="col">Nom</th>
+                <th scope="col">Logement</th>
+                <th scope="col">Période de départ</th>
+                <th scope="col" className="col-droite">Dernier index</th>
+                <th scope="col">Statut</th>
+                <th scope="col">Compte</th>
+                <th scope="col">Action</th>
               </tr>
             </thead>
             <tbody>
               {personnes.map((p) => (
-                <tr key={p.id} style={{ borderBottom: '1px solid #f0f0f0' }}>
-                  <td style={{ padding: 8 }}>{p.nom}</td>
-                  <td style={{ padding: 8 }}>{p.logement_nom ?? '—'}</td>
-                  <td style={{ padding: 8 }}>
+                <tr key={p.id}>
+                  <td className="texte-demi-gras">{p.nom}</td>
+                  <td>{p.logement_nom ?? '—'}</td>
+                  <td>
                     {String(p.periode_depart_mois).padStart(2, '0')}/{p.periode_depart_annee}
                   </td>
-                  <td style={{ padding: 8 }}>
+                  <td className="col-droite">
                     {p.dernier_index !== null ? `${p.dernier_index} kWh` : '—'}
                   </td>
-                  <td style={{ padding: 8 }}>
+                  <td>
                     {p.statut_actif ? (
-                      <span style={{ color: 'green' }}>Actif</span>
+                      <Badge variante="succes">Actif</Badge>
                     ) : (
-                      <span style={{ color: 'crimson' }}>Inactif</span>
+                      <Badge variante="neutre">Inactif</Badge>
                     )}
                   </td>
-                  <td style={{ padding: 8 }}>
+                  <td>
                     {erreurEmails ? (
-                      <span style={{ color: '#92400e' }}>⚠ État inconnu</span>
+                      <Badge variante="avertissement">État inconnu</Badge>
                     ) : p.compte_email ? (
-                      <span style={{ color: 'green' }}>✓ {p.compte_email}</span>
+                      <span className="texte-succes">✓ {p.compte_email}</span>
                     ) : (
-                      <span style={{ color: '#888' }}>Aucun</span>
+                      <span className="texte-tertiaire">Aucun</span>
                     )}
                   </td>
-                  <td style={{ padding: 8, display: 'flex', gap: 4 }}>
+                  <td className="personnes-actions">
                     {p.statut_actif ? (
                       <button type="button" onClick={() => desactiverPersonne(p.id)}>
                         Désactiver
@@ -392,7 +390,7 @@ export function PersonnesPage() {
                 </tr>
               ))}
             </tbody>
-          </table>
+          </table></div>
         )}
 
         {/* Formulaire de création de compte */}

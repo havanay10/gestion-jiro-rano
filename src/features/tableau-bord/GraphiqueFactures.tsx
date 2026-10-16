@@ -17,25 +17,25 @@ type Props = {
 
 function formaterAr(n: number): string {
   return new Intl.NumberFormat('fr-FR', {
-    maximumFractionDigits: 0,
+    minimumFractionDigits: 6,
+    maximumFractionDigits: 6,
   }).format(n) + ' Ar'
 }
 
-function TooltipPersonnalise({ active, payload, label }: any) {
+type LigneTooltip = { value?: number; dataKey?: string; color?: string }
+
+function TooltipPersonnalise({ active, payload, label }: {
+  active?: boolean
+  payload?: LigneTooltip[]
+  label?: string
+}) {
   if (!active || !payload || payload.length === 0) return null
   return (
     <div
-      style={{
-        background: '#fff',
-        border: '1px solid #e5e7eb',
-        borderRadius: 8,
-        boxShadow: '0 4px 6px rgba(15,23,42,0.06)',
-        padding: '8px 12px',
-        fontSize: 12,
-      }}
+      className="graphique-infobulle"
     >
       <div style={{ fontWeight: 600, marginBottom: 6 }}>{label}</div>
-      {payload.map((entry: any, i: number) => (
+      {payload.map((entry, i) => (
         <div key={i} style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
           <span
             style={{
@@ -65,14 +65,14 @@ export function GraphiqueFactures({ points, onClicPeriode }: Props) {
   }
 
   return (
-    <div style={{ width: '100%', height: 300 }}>
+    <div className="graphique-factures">
       <ResponsiveContainer>
         <BarChart
           data={points}
           margin={{ top: 20, right: 20, left: 10, bottom: 5 }}
           barGap={6}
         >
-          <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#e5e7eb" />
+          <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#e3e9f4" />
           <XAxis
             dataKey="label"
             tick={{ fontSize: 12, fill: '#64748b' }}
@@ -89,7 +89,7 @@ export function GraphiqueFactures({ points, onClicPeriode }: Props) {
               return String(v)
             }}
           />
-          <Tooltip content-={<TooltipPersonnalise />}/>
+          <Tooltip content={<TooltipPersonnalise />} />
           <Legend
             verticalAlign="top"
             align="right"
@@ -102,22 +102,24 @@ export function GraphiqueFactures({ points, onClicPeriode }: Props) {
           />
           <Bar
             dataKey="jiro"
-            fill="#e8a33d"
+            fill="#f3922c"
             radius={[4, 4, 0, 0]}
-            onClick={(data: any) => {
-              if (onClicPeriode && data?.annee && data?.mois) {
-                onClicPeriode(data.annee, data.mois)
+            onClick={(data: { payload?: PointGraphique }) => {
+              const point = data.payload
+              if (onClicPeriode && point?.annee && point?.mois) {
+                onClicPeriode(point.annee, point.mois)
               }
             }}
             cursor={onClicPeriode ? 'pointer' : 'default'}
           />
           <Bar
             dataKey="rano"
-            fill="#3b82f6"
+            fill="#168bd2"
             radius={[4, 4, 0, 0]}
-            onClick={(data: any) => {
-              if (onClicPeriode && data?.annee && data?.mois) {
-                onClicPeriode(data.annee, data.mois)
+            onClick={(data: { payload?: PointGraphique }) => {
+              const point = data.payload
+              if (onClicPeriode && point?.annee && point?.mois) {
+                onClicPeriode(point.annee, point.mois)
               }
             }}
             cursor={onClicPeriode ? 'pointer' : 'default'}

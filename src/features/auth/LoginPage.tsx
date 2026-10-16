@@ -2,6 +2,8 @@ import { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { supabase } from '../../lib/supabase'
 import { useAuth } from './AuthContext'
+import { LogoMarque } from '../../components/ui/LogoMarque'
+import { Icone } from '../../components/ui/Icone'
 
 export function LoginPage() {
   const navigate = useNavigate()
@@ -36,20 +38,21 @@ export function LoginPage() {
   }
 
   return (
-    <div className="login-page">
-      <div className="login-boite">
-        <div className="login-logo">
-          <div className="login-logo-icone">JR</div>
+    <main className="login-page">
+      <div className="login-conteneur">
+        <header className="login-entete">
+          <LogoMarque variante="connexion" />
           <div>
-            <div className="login-titre">Gestion Jiro &amp; Rano</div>
+            <h1 className="login-titre">Gestion Jiro &amp; Rano</h1>
             <div className="login-sous-titre">Connexion à votre espace de gestion</div>
           </div>
-        </div>
+        </header>
 
-        <form onSubmit={handleLogin} className="login-formulaire">
+        <section className="login-boite" aria-label="Connexion">
+          <form onSubmit={handleLogin} className="login-formulaire">
           {message && (
-            <div className="message message-erreur">
-              <span className="message-icone">⚠</span>
+            <div className="message message-erreur" role="alert" aria-live="assertive">
+              <span className="message-icone"><Icone nom="avertissement" /></span>
               <div>
                 <div className="message-titre">Erreur d'authentification</div>
                 <div>{message}</div>
@@ -62,7 +65,7 @@ export function LoginPage() {
               Adresse e-mail
             </label>
             <div className="champ-icone">
-              <span className="champ-icone-gauche">✉</span>
+              <span className="champ-icone-gauche"><Icone nom="mail" /></span>
               <input
                 id="login-email"
                 type="email"
@@ -81,7 +84,7 @@ export function LoginPage() {
               Mot de passe
             </label>
             <div className="champ-icone">
-              <span className="champ-icone-gauche">🔒</span>
+              <span className="champ-icone-gauche"><Icone nom="cadenas" /></span>
               <input
                 id="login-password"
                 type={motDePasseVisible ? 'text' : 'password'}
@@ -97,27 +100,26 @@ export function LoginPage() {
                 className="champ-icone-droite"
                 onClick={() => setMotDePasseVisible((v) => !v)}
                 aria-label={motDePasseVisible ? 'Masquer le mot de passe' : 'Afficher le mot de passe'}
-                tabIndex={-1}
+                aria-pressed={motDePasseVisible}
               >
-                {motDePasseVisible ? '🙈' : '👁'}
+                <Icone nom={motDePasseVisible ? 'oeilMasque' : 'oeil'} />
               </button>
             </div>
           </div>
 
           <div className="login-note">
-            <span>ℹ</span>
+            <span><Icone nom="info" /></span>
             <span>Les comptes sont créés par l'administrateur.</span>
           </div>
 
           <button type="submit" className="btn btn-primaire btn-lg btn-bloc" disabled={enCours}>
             {enCours ? 'Connexion…' : '→ Se connecter'}
           </button>
-        </form>
+          </form>
+        </section>
 
-        <div className="texte-centre texte-tres-petit texte-tertiaire">
-          © Gestion Jiro &amp; Rano 2026
-        </div>
+        <footer className="login-pied">© Gestion Jiro &amp; Rano 2026</footer>
       </div>
-    </div>
+    </main>
   )
 }

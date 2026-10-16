@@ -3,11 +3,13 @@ import { supabase } from '../../lib/supabase'
 import { useSaisiePeriode } from './useSaisiePeriode'
 import { calculerRepartition } from './calcul'
 import { TOLERANCE_EQUILIBRE } from '../../lib/constantes';
+import { PageHeader } from '../../components/ui/PageHeader'
+import { Icone } from '../../components/ui/Icone'
 
 function arrondi(n: number, maxDec = 6): string {
   return new Intl.NumberFormat('fr-FR', {
     maximumFractionDigits: maxDec,
-    minimumFractionDigits: 0,
+    minimumFractionDigits: maxDec,
   }).format(n)
 }
 
@@ -122,53 +124,27 @@ export function SaisiePeriodePage() {
   const bloque = periodeExistante || loading
 
   return (
-    <div style={{ display: 'grid', gap: 24 }}>
-      <header>
-        <h2 style={{ margin: 0 }}>Saisie &amp; Répartition d’une période</h2>
-        <p style={{ color: '#666', marginTop: 4 }}>
-          Sélectionnez un mois, saisissez les montants, puis les index et quantités Rano.
-        </p>
-      </header>
+    <div className="page saisie-page">
+      <PageHeader
+        surtitre="CRÉATION ET SAISIE D’UNE PÉRIODE"
+        titre="Nouvelle période de répartition"
+        sousTitre="Saisissez les factures globales, puis les index et quantités Rano des personnes concernées."
+        actions={<div className="saisie-periode-controles">
+          <label>Mois<select value={mois} onChange={(e) => setMois(Number(e.target.value))}>
+            {Array.from({ length: 12 }, (_, i) => i + 1).map((m) => <option key={m} value={m}>{String(m).padStart(2, '0')}</option>)}
+          </select></label>
+          <label>Année<input type="number" value={annee} onChange={(e) => setAnnee(Number(e.target.value))} /></label>
+          <div className="saisie-identifiant"><span>Identifiant période</span><strong>{annee}-{String(mois).padStart(2, '0')}</strong></div>
+        </div>}
+      />
 
-      {/* Période */}
-      <section style={{ border: '1px solid #ddd', borderRadius: 8, padding: 16 }}>
-        <h3 style={{ marginTop: 0 }}>Période</h3>
-        <div style={{ display: 'flex', gap: 16 }}>
-          <label>
-            Mois
-            <select
-              value={mois}
-              onChange={(e) => setMois(Number(e.target.value))}
-            >
-              {Array.from({ length: 12 }, (_, i) => i + 1).map((m) => (
-                <option key={m} value={m}>
-                  {String(m).padStart(2, '0')}
-                </option>
-              ))}
-            </select>
-          </label>
-          <label>
-            Année
-            <input
-              type="number"
-              value={annee}
-              onChange={(e) => setAnnee(Number(e.target.value))}
-            />
-          </label>
-        </div>
-
-        {periodeExistante && (
-          <p style={{ color: 'crimson' }}>
-            Une période existe déjà pour {String(mois).padStart(2, '0')}/{annee}.
-            Choisissez un autre mois ou consultez l’historique.
-          </p>
-        )}
-      </section>
+      {periodeExistante && <div className="message message-erreur" role="alert"><span className="message-icone"><Icone nom="erreur" /></span><div><div className="message-titre">Période déjà enregistrée</div>Une période existe déjà pour {String(mois).padStart(2, '0')}/{annee}. Choisissez un autre mois ou consultez l’historique.</div></div>}
 
       {/* Montants */}
-      <section style={{ border: '1px solid #ddd', borderRadius: 8, padding: 16 }}>
-        <h3 style={{ marginTop: 0 }}>Factures globales</h3>
-        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16 }}>
+      <section className="grille-2 saisie-montants">
+        <div className="carte saisie-facture saisie-facture-jiro">
+          <div className="saisie-facture-entete"><h3>Facture globale Électricité (Jiro)</h3><span className="badge badge-jiro">Strictement &gt; 0 Ar</span></div>
+          <p className="texte-secondaire">Montant brut certifié de la facture à répartir selon les consommations individuelles.</p>
           <label>
             Montant facture Jiro (Ar) *
             <input
@@ -185,6 +161,11 @@ export function SaisiePeriodePage() {
               disabled={bloque}
             />
           </label>
+          <div className="saisie-facture-pied"><span>Format attendu : chiffre décimal</span><strong>Précision : 6 décimales</strong></div>
+        </div>
+        <div className="carte saisie-facture saisie-facture-rano">
+          <div className="saisie-facture-entete"><h3>Facture globale Eau (Rano)</h3><span className="badge badge-rano">Strictement &gt; 0 Ar</span></div>
+          <p className="texte-secondaire">Montant brut certifié de la facture à répartir au prorata des quantités Rano.</p>
           <label>
             Montant facture Rano (Ar) *
             <input
@@ -201,12 +182,18 @@ export function SaisiePeriodePage() {
               disabled={bloque}
             />
           </label>
+          <div className="saisie-facture-pied"><span>Format attendu : chiffre décimal</span><strong>Précision : 6 décimales</strong></div>
         </div>
       </section>
 
       {/* Tableau de saisie */}
-      <section style={{ border: '1px solid #ddd', borderRadius: 8, padding: 16 }}>
-        <h3 style={{ marginTop: 0 }}>Personnes concernées ({lignes.length})</h3>
+      <section className="carte carte-sans-padding">
+        <div className="carte-entete saisie-tableau-entete">
+          <div>
+            <div className="carte-titre">Personnes concernées ({lignes.length})</div>
+            <div className="carte-sous-titre">Les index et quantités saisis recalculent les parts automatiquement.</div>
+          </div>
+        </div>
 
         {loading && <p>Chargement…</p>}
         {erreur && <p style={{ color: 'crimson' }}>Erreur : {erreur}</p>}
@@ -215,7 +202,7 @@ export function SaisiePeriodePage() {
         )}
 
         {lignes.length > 0 && (
-          <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 14 }}>
+          <div className="tableau-conteneur"><table className="tableau">
             <thead>
               <tr style={{ textAlign: 'left', borderBottom: '1px solid #ddd' }}>
                 <th style={{ padding: 8 }}>Personne</th>
@@ -283,10 +270,10 @@ export function SaisiePeriodePage() {
                       />
                     </td>
                     <td style={{ padding: 8 }}>
-                      {calc ? arrondi(calc.part_jiro) : '—'}
+                      {arrondi(calc?.part_jiro ?? 0)}
                     </td>
                     <td style={{ padding: 8 }}>
-                      {calc ? arrondi(calc.part_rano) : '—'}
+                      {arrondi(calc?.part_rano ?? 0)}
                     </td>
                   </tr>
                 )
@@ -301,14 +288,14 @@ export function SaisiePeriodePage() {
                 <td style={{ padding: 8 }}>{arrondi(resultat.totalPartRano)}</td>
               </tr>
             </tfoot>
-          </table>
+          </table></div>
         )}
       </section>
 
       {/* Résumé */}
       {resultat.lignes.length > 0 && (
-        <section style={{ border: '1px solid #ddd', borderRadius: 8, padding: 16 }}>
-          <h3 style={{ marginTop: 0 }}>Résumé de la répartition</h3>
+        <section className="carte">
+          <h3>Résumé de la répartition</h3>
           <ul style={{ listStyle: 'none', padding: 0, margin: 0, display: 'grid', gap: 6 }}>
             <li>
               <strong>Coût unitaire Jiro :</strong> {arrondi(resultat.coutUnitaireJiro)} Ar/kWh
@@ -341,17 +328,12 @@ export function SaisiePeriodePage() {
       {/* Erreurs */}
       {resultat.erreurs.length > 0 && (
         <section
-          style={{
-            border: '1px solid crimson',
-            borderRadius: 8,
-            padding: 16,
-            background: '#fff5f5',
-          }}
+          className="message message-erreur"
         >
-          <h4 style={{ marginTop: 0, color: 'crimson' }}>Erreurs bloquantes</h4>
+          <h4>Erreurs bloquantes</h4>
           <ul>
             {resultat.erreurs.map((e, i) => (
-              <li key={i} style={{ color: 'crimson' }}>{e}</li>
+              <li key={i}>{e}</li>
             ))}
           </ul>
         </section>
@@ -360,17 +342,12 @@ export function SaisiePeriodePage() {
       {/* Avertissements */}
       {resultat.avertissements.length > 0 && (
         <section
-          style={{
-            border: '1px solid #f59e0b',
-            borderRadius: 8,
-            padding: 16,
-            background: '#fffbeb',
-          }}
+          className="message message-avertissement"
         >
-          <h4 style={{ marginTop: 0, color: '#92400e' }}>Avertissements</h4>
+          <h4>Avertissements</h4>
           <ul>
             {resultat.avertissements.map((a, i) => (
-              <li key={i} style={{ color: '#92400e' }}>{a}</li>
+              <li key={i}>{a}</li>
             ))}
           </ul>
         </section>
@@ -380,7 +357,7 @@ export function SaisiePeriodePage() {
       {messageErreur && <p style={{ color: 'crimson' }}>{messageErreur}</p>}
 
       {/* Actions */}
-      <div style={{ display: 'flex', gap: 12 }}>
+      <div className="ligne-fin saisie-actions">
         <button
           type="button"
           onClick={enregistrer}
@@ -392,12 +369,13 @@ export function SaisiePeriodePage() {
             montantJiroNum <= 0 ||
             montantRanoNum <= 0
           }
+          className="btn btn-primaire btn-lg"
         >
           {enregistrementEnCours
             ? 'Enregistrement…'
             : `Enregistrer la période ${String(mois).padStart(2, '0')}/${annee}`}
         </button>
-        <button type="button" onClick={recharger} disabled={bloque}>
+        <button type="button" className="btn" onClick={recharger} disabled={bloque}>
           Recharger
         </button>
       </div>
