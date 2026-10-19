@@ -61,19 +61,6 @@ export function AdminLayout({ children }: { children: ReactNode }) {
               {lien.label}
             </NavLink>
           ))}
-          <details className="header-menu" ref={menuComplementaire}>
-            <summary className={'header-lien' + (menuComplementaireActif ? ' header-lien-actif' : '')}>
-              Administration <span aria-hidden="true">⌄</span>
-            </summary>
-            <div className="header-menu-contenu">
-              <NavLink to="/admin/logements" className="header-menu-lien" onClick={() => { if (menuComplementaire.current) menuComplementaire.current.open = false }}>
-                Logements
-              </NavLink>
-              <NavLink to="/admin/audit" className="header-menu-lien" onClick={() => { if (menuComplementaire.current) menuComplementaire.current.open = false }}>
-                Journal d’audit
-              </NavLink>
-            </div>
-          </details>
         </nav>
 
         <div className="header-utilisateur">
