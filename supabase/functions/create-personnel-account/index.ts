@@ -5,14 +5,14 @@ const ORIGINES_AUTORISEES = [
   'http://localhost:5173',
   'http://localhost:4173',
   // Remplacez par votre URL Vercel réelle
-  'https://gestion-jiro-rano.vercel.app/',
+  'https://gestion-jiro-rano.vercel.app',
 ]
 
-function corsPour(req: Request): Record<string, string> {
+function corsPour(req: Request): Record<string, string> | null {
   const origin = req.headers.get('Origin') ?? ''
-  const autorise = ORIGINES_AUTORISEES.includes(origin) ? origin : ORIGINES_AUTORISEES[0]
+  if (!ORIGINES_AUTORISEES.includes(origin)) return null
   return {
-    'Access-Control-Allow-Origin': autorise,
+    'Access-Control-Allow-Origin': origin,
     'Access-Control-Allow-Methods': 'POST, OPTIONS',
     'Access-Control-Allow-Headers':
       'authorization, content-type, x-client-info, apikey, x-supabase-api-version, prefer',
@@ -23,6 +23,13 @@ function corsPour(req: Request): Record<string, string> {
 
 Deno.serve(async (req) => {
   const cors = corsPour(req)
+
+  if (!cors) {
+    return new Response(
+      JSON.stringify({ ok: false, error: 'Origine non autorisée.' }),
+      { status: 403, headers: { 'Content-Type': 'application/json', 'Vary': 'Origin' } }
+    )
+  }
 
   // Précontrôle CORS
   if (req.method === 'OPTIONS') {
