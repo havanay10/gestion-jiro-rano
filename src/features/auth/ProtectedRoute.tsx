@@ -90,7 +90,7 @@ export function ProtectedRoute({ children, roleRequis }: Props) {
   if (roleRequis && profil.role !== roleRequis) {
     return (
       <Navigate
-        to={profil.role === 'admin' ? '/admin' : '/espace'}
+        to={profil.role === 'admin' ? '/admin' : '/accueil'}
         replace
       />
     )

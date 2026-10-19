@@ -52,15 +52,15 @@ export function HistoriquePage() {
   }
 
   return (
-    <div className="page">
+    <div className="page historique-page">
       <PageHeader
         surtitre="CONSULTATION ET EXPORT"
-        titre="Historique des périodes"
-        sousTitre="Consultez les répartitions enregistrées et exportez les périodes certifiées."
+        titre="Historique des Périodes & Export CSV"
+        sousTitre="Consultez chronologiquement les répartitions, vérifiez les périodes et générez des exports CSV conformes."
       />
 
       {/* Filtres */}
-      <section className="carte carte-compacte">
+      <section className="carte carte-compacte historique-filtres" aria-label="Filtres de l’historique">
         <div className="grille-filtres">
           <label>
             Année
@@ -70,7 +70,7 @@ export function HistoriquePage() {
                 setAnnee(e.target.value === 'toutes' ? 'toutes' : Number(e.target.value))
               }
             >
-              <option value="toutes">Toutes</option>
+              <option value="toutes">Toutes les années</option>
               {anneesDispo.map((a) => (
                 <option key={a} value={a}>{a}</option>
               ))}
@@ -85,7 +85,7 @@ export function HistoriquePage() {
                 setMois(e.target.value === 'tous' ? 'tous' : Number(e.target.value))
               }
             >
-              <option value="tous">Tous</option>
+              <option value="tous">Tous les mois</option>
               {Array.from({ length: 12 }, (_, i) => i + 1).map((m) => (
                 <option key={m} value={m}>
                   {moisFrancais[m]}
@@ -107,22 +107,20 @@ export function HistoriquePage() {
             </select>
           </label>
 
-          <Button type="button" variante="fantome" onClick={reinitialiser}>
-            Réinitialiser
+          <Button type="button" variante="fantome" className="historique-reset" onClick={reinitialiser}>
+            Réinitialiser les filtres
           </Button>
+          <span className="historique-compte" aria-live="polite">
+            {periodes.length} période{periodes.length > 1 ? 's' : ''} affichée{periodes.length > 1 ? 's' : ''}
+          </span>
         </div>
-
-        <p className="historique-compte">
-          {periodes.length} période{periodes.length > 1 ? 's' : ''} affichée
-          {periodes.length > 1 ? 's' : ''}
-        </p>
       </section>
 
       {/* Message d'erreur */}
       {messageErreur && <Message variante="erreur" titre="Échec de l’export">{messageErreur}</Message>}
 
       {/* Liste */}
-      <section className="carte carte-sans-padding">
+      <section className="carte carte-sans-padding historique-tableau">
         <CardEntete titre="Périodes enregistrées" sousTitre={`${periodes.length} période${periodes.length === 1 ? '' : 's'} affichée${periodes.length === 1 ? '' : 's'}`} />
         {loading && <LoadingState />}
         {erreur && <Message variante="erreur" titre="Erreur de chargement">{erreur}</Message>}
@@ -135,10 +133,10 @@ export function HistoriquePage() {
             { cle: 'periode', titre: 'Période', afficher: (p) => <><strong>{moisFrancais[p.mois]} {p.annee}</strong><div className="col-secondaire">{p.annee}-{String(p.mois).padStart(2, '0')}</div></> },
             { cle: 'jiro', titre: 'Facture Jiro', alignement: 'droite', afficher: (p) => `${arrondi(p.montant_jiro)} Ar` },
             { cle: 'rano', titre: 'Facture Rano', alignement: 'droite', afficher: (p) => `${arrondi(p.montant_rano)} Ar` },
-            { cle: 'total', titre: 'Total', alignement: 'droite', afficher: (p) => <strong>{arrondi(p.montant_jiro + p.montant_rano)} Ar</strong> },
+            { cle: 'total', titre: 'Total factures', alignement: 'droite', afficher: (p) => <strong>{arrondi(p.montant_jiro + p.montant_rano)} Ar</strong> },
             { cle: 'personnes', titre: 'Personnes', alignement: 'centre', afficher: (p) => p.nb_personnes },
             { cle: 'etat', titre: 'État', afficher: (p) => p.equilibre ? <Badge variante="succes">✓ Vérifiée</Badge> : <Badge variante="erreur">Déséquilibre</Badge> },
-            { cle: 'actions', titre: 'Actions', afficher: (p) => <div className="tableau-actions"><Link to={`/admin/periodes/${p.id}`} className="btn btn-sm">Voir le détail</Link><Button type="button" taille="sm" variante="primaire" onClick={() => exporter(p.id)} disabled={exportEnCours === p.id || !p.equilibre} title={p.equilibre ? 'Exporter en CSV' : 'Export bloqué : période non certifiée.'}>{exportEnCours === p.id ? 'Export…' : 'Exporter CSV'}</Button></div> },
+            { cle: 'actions', titre: 'Actions', afficher: (p) => <div className="tableau-actions historique-actions"><Link to={`/admin/periodes/${p.id}`} className="btn btn-sm historique-detail">Voir le détail</Link><Button type="button" taille="sm" variante="primaire" className="historique-export" onClick={() => exporter(p.id)} disabled={exportEnCours === p.id || !p.equilibre} title={p.equilibre ? 'Exporter en CSV' : 'Export bloqué : période non certifiée.'}>{exportEnCours === p.id ? 'Export…' : 'Export CSV'}</Button></div> },
           ]}
         />}
       </section>

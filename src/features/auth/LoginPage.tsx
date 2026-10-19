@@ -17,7 +17,7 @@ export function LoginPage() {
   // Redirection automatique si déjà connecté
   useEffect(() => {
     if (!loading && user && profil) {
-      navigate(profil.role === 'admin' ? '/admin' : '/espace', { replace: true })
+      navigate(profil.role === 'admin' ? '/admin' : '/accueil', { replace: true })
     }
   }, [loading, user, profil, navigate])
 

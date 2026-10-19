@@ -77,7 +77,7 @@ export function AdminLayout({ children }: { children: ReactNode }) {
         </nav>
 
         <div className="header-utilisateur">
-          <div className="avatar">{initiales}</div>
+          <div className="avatar header-profil-avatar" aria-hidden="true">{initiales}</div>
           <div className="header-utilisateur-texte">
             <div className="header-utilisateur-nom">{nomAffiche}</div>
             <div className="header-utilisateur-role">{roleAffiche}</div>
@@ -89,7 +89,9 @@ export function AdminLayout({ children }: { children: ReactNode }) {
             className="header-action"
             aria-label="Se déconnecter"
           >
-            ⎋
+            <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+              <path d="M10 17l5-5-5-5M15 12H3m9-8h6a3 3 0 0 1 3 3v10a3 3 0 0 1-3 3h-6" />
+            </svg>
           </button>
         </div>
       </header>

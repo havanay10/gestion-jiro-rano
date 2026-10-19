@@ -11,6 +11,7 @@ import { SaisiePeriodePage } from './features/periodes/SaisiePeriodePage'
 import { HistoriquePage } from './features/historique/HistoriquePage'
 import { DetailPeriodePage } from './features/periodes/DetailPeriodePage'
 import { EspacePersonnelPage } from './features/espace-personnel/EspacePersonnelPage'
+import { AccueilPersonnelPage } from './features/espace-personnel/AccueilPersonnelPage'
 import { AdminAudit } from './features/historique/AdminAudit'
 import { DetailRelevePersonnelPage } from './features/espace-personnel/DetailRelevePersonnelPage'
 
@@ -95,6 +96,16 @@ export default function App() {
           />
 
           {/* Espace personnel */}
+          <Route
+            path="/accueil"
+            element={
+              <ProtectedRoute roleRequis="personnel">
+                <PersonnelLayout>
+                  <AccueilPersonnelPage />
+                </PersonnelLayout>
+              </ProtectedRoute>
+            }
+          />
           <Route
             path="/espace"
             element={

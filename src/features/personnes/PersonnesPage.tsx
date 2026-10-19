@@ -8,7 +8,8 @@ import { supabase } from '../../lib/supabase'
 import { Drawer } from '../../components/ui/Drawer'
 import { PageHeader } from '../../components/ui/PageHeader'
 import { Button } from '../../components/ui/Button'
-import { Badge, EmptyState, LoadingState, Message } from '../../components/ui'
+import { Badge, EmptyState, LoadingState, Message, Modal } from '../../components/ui'
+import { Icone } from '../../components/ui/Icone'
 
 type LogementOption = { id: string; nom_code: string }
 
@@ -164,6 +165,12 @@ export function PersonnesPage() {
     }
   }
 
+  const fermerReactivation = useCallback(() => {
+    setReactivationEnCours(null)
+    setLogementReactivation('')
+    setMessageReactivation('')
+  }, [])
+
   async function creerCompte(personne_id: string) {
     setMessageCompte('')
     if (!email || !password) {
@@ -208,21 +215,33 @@ export function PersonnesPage() {
     }
   }
 
+  const fermerCreationCompte = useCallback(() => {
+    setCompteEnCours(null)
+    setEmail('')
+    setPassword('')
+    setMessageCompte('')
+  }, [])
+
   return (
-    <div className="page">
+    <div className="page personnes-page">
       <PageHeader
-        surtitre="GESTION DES OCCUPANTS ET SOUS-COMPTES"
         titre="Gestion des personnes & sous-comptes"
-        sousTitre="Gérez les occupants, leurs compteurs, logements et accès à l’espace personnel."
+        sousTitre="Configuration des occupants, logements, compteurs et accès aux comptes personnels."
         actions={<div className="personnes-entete-actions">
-          <span className="badge badge-info">{personnes.filter((p) => p.statut_actif).length} personnes actives</span>
-          <Button variante="primaire" onClick={() => setCreationOuverte(true)}>Ajouter une personne</Button>
+          <div className="personnes-compteur" aria-label={`${personnes.filter((p) => p.statut_actif).length} personnes actives`}>
+            <span>Personnes actives</span>
+            <strong>{personnes.filter((p) => p.statut_actif).length}</strong>
+          </div>
+          <Button variante="primaire" taille="lg" className="personnes-ajouter" icone={<Icone nom="ajouter" />} onClick={() => setCreationOuverte(true)}>Ajouter une nouvelle personne</Button>
         </div>}
       />
-      <details className="notice-pedagogique">
-        <summary>Règle d’index initial et période de départ</summary>
-        <p>Le nouvel index initial devient le relevé de référence. La période de départ ne compte pas de consommation pour cette personne.</p>
-        <span className="badge badge-info">Période active : {String(new Date().getMonth() + 1).padStart(2, '0')}/{new Date().getFullYear()}</span>
+      <details open className="notice-pedagogique notice-personnes">
+        <summary>
+          <span className="notice-personnes-icone"><Icone nom="info" /></span>
+          <strong>Règle de rattachement au calcul de répartition</strong>
+          <span className="badge badge-info notice-personnes-periode">Période active : {String(new Date().getMonth() + 1).padStart(2, '0')}/{new Date().getFullYear()}</span>
+        </summary>
+        <p>Toute nouvelle inscription requiert un index initial de référence. La période de départ ne génère pas de consommation Jiro pour cette personne ; la répartition démarre à partir des périodes suivantes.</p>
       </details>
 
       {/* Formulaire de création */}
@@ -393,127 +412,68 @@ export function PersonnesPage() {
           </table></div>
         )}
 
-        {/* Formulaire de création de compte */}
-        {compteEnCours && (
-          <section
-            style={{
-              border: '1px solid #ddd',
-              borderRadius: 8,
-              padding: 16,
-              marginTop: 16,
-            }}
-          >
-            <h4 style={{ marginTop: 0 }}>
-              Créer un compte pour{' '}
-              {personnes.find((p) => p.id === compteEnCours)?.nom}
-            </h4>
-            <div style={{ display: 'grid', gap: 12, maxWidth: 400 }}>
-              <label>
-                Email
-                <input
-                  type="email"
-                  value={email}
-                  onChange={(e) => setEmail(e.target.value)}
-                />
-              </label>
-              <label>
-                Mot de passe (8 caractères minimum)
-                <input
-                  type="password"
-                  value={password}
-                  onChange={(e) => setPassword(e.target.value)}
-                />
-              </label>
-              <div style={{ display: 'flex', gap: 8 }}>
-                <button type="button" onClick={() => creerCompte(compteEnCours)}>
-                  Créer le compte
-                </button>
-                <button
-                  type="button"
-                  onClick={() => {
-                    setCompteEnCours(null)
-                    setEmail('')
-                    setPassword('')
-                    setMessageCompte('')
-                  }}
-                >
-                  Annuler
-                </button>
-              </div>
-              {messageCompte && <p style={{ color: 'crimson' }}>{messageCompte}</p>}
-            </div>
-          </section>
-        )}
-
-        {/* Formulaire de réactivation */}
-        {reactivationEnCours && (
-          <section
-            style={{
-              border: '1px solid #ddd',
-              borderRadius: 8,
-              padding: 16,
-              marginTop: 16,
-            }}
-          >
-            <h4 style={{ marginTop: 0 }}>
-              Réactiver{' '}
-              {personnes.find((p) => p.id === reactivationEnCours)?.nom}
-            </h4>
-
-            <p style={{ color: '#666', fontSize: 13 }}>
-              Choisissez le logement à réattribuer. Seuls les logements libres sont
-              proposés. Le rattachement précédent reste dans l’historique.
-            </p>
-
-            <div style={{ display: 'grid', gap: 12, maxWidth: 400 }}>
-              <label>
-                Logement
-                <select
-                  value={logementReactivation}
-                  onChange={(e) => setLogementReactivation(e.target.value)}
-                >
-                  <option value="">— Sélectionner —</option>
-                  {logementsDispo.map((l) => (
-                    <option key={l.id} value={l.id}>
-                      {l.nom_code}
-                    </option>
-                  ))}
-                </select>
-              </label>
-
-              {logementsDispo.length === 0 && (
-                <p style={{ fontSize: 12, color: '#888' }}>
-                  Aucun logement disponible. Libérez un logement d’abord.
-                </p>
-              )}
-
-              <div style={{ display: 'flex', gap: 8 }}>
-                <button
-                  type="button"
-                  onClick={() => reactiverAvecLogement(reactivationEnCours)}
-                  disabled={logementsDispo.length === 0}
-                >
-                  Réactiver
-                </button>
-                <button
-                  type="button"
-                  onClick={() => {
-                    setReactivationEnCours(null)
-                    setLogementReactivation('')
-                    setMessageReactivation('')
-                  }}
-                >
-                  Annuler
-                </button>
-              </div>
-
-              {messageReactivation && (
-                <p style={{ color: 'crimson' }}>{messageReactivation}</p>
-              )}
-            </div>
-          </section>
-        )}
       </section>
+      {compteEnCours && (
+        <Modal
+          ouvert
+          titre="Créer un compte"
+          sousTitre={`Pour ${personnes.find((p) => p.id === compteEnCours)?.nom ?? 'cette personne'}`}
+          onFermer={fermerCreationCompte}
+        >
+          <form
+            className="personnes-compte-formulaire"
+            onSubmit={(e) => {
+              e.preventDefault()
+              void creerCompte(compteEnCours)
+            }}
+          >
+            <label className="champ">
+              <span className="champ-label">Adresse e-mail</span>
+              <input className="champ-saisie" type="email" autoComplete="email" value={email} onChange={(e) => setEmail(e.target.value)} />
+            </label>
+            <label className="champ">
+              <span className="champ-label">Mot de passe (8 caractères minimum)</span>
+              <input className="champ-saisie" type="password" autoComplete="new-password" value={password} onChange={(e) => setPassword(e.target.value)} />
+            </label>
+            {messageCompte && <Message variante="erreur">{messageCompte}</Message>}
+            <div className="personnes-compte-actions">
+              <Button type="button" onClick={fermerCreationCompte}>Annuler</Button>
+              <Button type="submit" variante="primaire">Créer le compte</Button>
+            </div>
+          </form>
+        </Modal>
+      )}
+      {reactivationEnCours && (
+        <Modal
+          ouvert
+          titre={`Réactiver ${personnes.find((p) => p.id === reactivationEnCours)?.nom ?? 'cette personne'}`}
+          sousTitre="Choisissez un logement disponible pour rétablir le rattachement."
+          onFermer={fermerReactivation}
+        >
+          <form
+            className="personnes-compte-formulaire"
+            onSubmit={(e) => {
+              e.preventDefault()
+              void reactiverAvecLogement(reactivationEnCours)
+            }}
+          >
+            <p className="personnes-reactivation-aide">Seuls les logements libres sont proposés. Le rattachement précédent reste dans l’historique.</p>
+            <label className="champ">
+              <span className="champ-label">Logement</span>
+              <select className="champ-select" value={logementReactivation} onChange={(e) => setLogementReactivation(e.target.value)}>
+                <option value="">— Sélectionner —</option>
+                {logementsDispo.map((l) => <option key={l.id} value={l.id}>{l.nom_code}</option>)}
+              </select>
+            </label>
+            {logementsDispo.length === 0 && <p className="personnes-reactivation-indisponible" role="status">Aucun logement disponible. Libérez un logement d’abord.</p>}
+            {messageReactivation && <Message variante="erreur">{messageReactivation}</Message>}
+            <div className="personnes-compte-actions">
+              <Button type="button" onClick={fermerReactivation}>Annuler</Button>
+              <Button type="submit" variante="primaire" disabled={logementsDispo.length === 0}>Réactiver</Button>
+            </div>
+          </form>
+        </Modal>
+      )}
     </div>
   )
 }
