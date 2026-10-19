@@ -1,15 +1,12 @@
 import type { ReactNode } from 'react'
-import { NavLink, useLocation, useNavigate } from 'react-router-dom'
+import { NavLink, useNavigate } from 'react-router-dom'
 import { useAuth } from '../auth/AuthContext'
 import { Footer } from './Footer'
-import { useRef } from 'react'
 import { LogoMarque } from '../../components/ui/LogoMarque'
 
 export function AdminLayout({ children }: { children: ReactNode }) {
   const { signOut, user, profil } = useAuth()
   const navigate = useNavigate()
-  const location = useLocation()
-  const menuComplementaire = useRef<HTMLDetailsElement>(null)
 
   async function handleSignOut() {
     await signOut()
@@ -34,9 +31,6 @@ export function AdminLayout({ children }: { children: ReactNode }) {
     { to: '/admin/personnes', label: 'Gestion des personnes' },
     { to: '/admin/historique', label: 'Historique & Export' },
   ]
-  const menuComplementaireActif =
-    location.pathname === '/admin/logements' || location.pathname === '/admin/audit'
-
   return (
     <div className="layout-app layout-app-admin">
       <header className="header-app">
